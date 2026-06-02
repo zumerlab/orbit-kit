@@ -1,0 +1,7 @@
+node_modules/
+.shots/
+*.tgz
+*.log
+.DS_Store
+.vscode/
+.idea/

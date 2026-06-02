@@ -1,0 +1,57 @@
+{
+  "name": "@zumer/orbit-kit",
+  "version": "0.1.0",
+  "description": "High-level, declarative web components on top of the Orbit CSS framework — gauges, charts, activity rings, knobs, pie menus, cockpit instruments, analog clocks, compasses and radars, each in one tag.",
+  "type": "module",
+  "main": "src/orbit-kit.js",
+  "module": "src/orbit-kit.js",
+  "exports": {
+    ".": "./src/orbit-kit.js",
+    "./*": "./src/*"
+  },
+  "files": [
+    "src"
+  ],
+  "sideEffects": [
+    "./src/*.js"
+  ],
+  "scripts": {
+    "test": "node test/smoke.mjs",
+    "shots": "node test/shoot.mjs",
+    "shots:menus": "node test/shoot-menus.mjs"
+  },
+  "peerDependencies": {
+    "@zumer/orbit": "^1.4.9"
+  },
+  "devDependencies": {
+    "playwright": "^1.55.1"
+  },
+  "keywords": [
+    "orbit",
+    "web-components",
+    "custom-elements",
+    "radial",
+    "gauge",
+    "donut-chart",
+    "activity-rings",
+    "knob",
+    "pie-menu",
+    "clock",
+    "compass",
+    "radar",
+    "dashboard",
+    "circular",
+    "ui",
+    "zumerlab"
+  ],
+  "homepage": "https://zumerlab.com/orbit-kit",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zumerlab/orbit-kit.git"
+  },
+  "bugs": {
+    "url": "https://github.com/zumerlab/orbit-kit/issues"
+  },
+  "author": "Juan Martin Muda - Zumerlab",
+  "license": "MIT"
+}
