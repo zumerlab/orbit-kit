@@ -19,6 +19,13 @@
     h1 { font-weight: 800; }
     h2 { font-weight: 700; margin-top: 2.5rem; border-bottom: 1px solid #1f2937; padding-bottom: .4rem; }
     p.lead { color: #9ca3af; max-width: 70ch; }
+    a { color: #3da9fc; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .built-on { display: inline-flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: center;
+      margin: .25rem 0 1.25rem; padding: .55rem .9rem; border: 1px solid #1f2937; border-radius: 10px;
+      background: #0b1622; color: #9ca3af; font-size: 14px; }
+    .built-on strong { color: #d8eefe; font-weight: 700; }
+    footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid #1f2937; color: #9ca3af; font-size: 14px; }
     .grid { display: flex; flex-wrap: wrap; gap: 2.5rem; align-items: flex-end; margin-top: 1.5rem; }
     .cell { text-align: center; }
     .cell small { display: block; margin-top: .5rem; color: #9ca3af; max-width: 26ch; }
@@ -28,10 +35,16 @@
 </head>
 <body>
   <h1>orbit-kit — component gallery</h1>
+  <p class="built-on">
+    <span>🛰️ Built on <strong><a href="https://github.com/zumerlab/orbit">Orbit</a></strong> — the CSS framework for radial UIs.</span>
+    <a href="https://zumerlab.github.io/orbit-docs">Orbit docs&nbsp;↗</a>
+    <a href="https://github.com/zumerlab/orbit">Orbit on GitHub&nbsp;↗</a>
+  </p>
   <p class="lead">
     Every widget below is a single declarative tag that expands into the canonical
-    Orbit structure in the light DOM. Open devtools "Inspect" to see what each one
-    renders. Requires the Orbit core (CSS + JS) loaded on the page.
+    <a href="https://zumerlab.github.io/orbit-docs">Orbit</a> structure in the light DOM.
+    Open devtools "Inspect" to see what each one renders. Requires the
+    <a href="https://github.com/zumerlab/orbit">Orbit core</a> (CSS + JS) loaded on the page.
   </p>
 
   <h2>&lt;o-gauge&gt; — single value</h2>
@@ -268,5 +281,15 @@
     let h = 0;
     setInterval(() => { h = (h + 2) % 360; compass.setAttribute('heading', h); }, 80);
   </script>
+
+  <footer>
+    <strong>orbit-kit</strong> is part of the
+    <a href="https://github.com/zumerlab/orbit">Orbit</a> ecosystem by
+    <a href="https://github.com/zumerlab">Zumerlab</a>.
+    Orbit is the CSS framework that does the radial layout math — orbit-kit just wraps the
+    common recipes into one-line components.
+    &nbsp;·&nbsp; <a href="https://zumerlab.github.io/orbit-docs">Orbit docs</a>
+    &nbsp;·&nbsp; <a href="https://github.com/zumerlab/orbit-kit">orbit-kit on GitHub</a>
+  </footer>
 </body>
 </html>
