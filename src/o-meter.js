@@ -1,109 +1,48 @@
-/**
- * <o-meter> — speedometer / tachometer gauge with ticks, colored zones and a needle.
- *
- * Collapses the Orbit recipe:
- *
- *   .bigbang > .gravity-spot
- *     ├── .orbit-{outer}   (range/from, fit-range) > .vector × ticks
- *     ├── .orbit-{mid}     (range/from)            > <o-arc> × zones
- *     ├── .orbit-{inner}   (range/from)            > <o-arc shape="arrow"> (needle)
- *     └── .orbit-0 > .satellite.at-center > .capsule   (value + unit)
- *
- * ...into one tag:
- *
- *   <o-meter value="125" min="0" max="240" unit="km/h" ticks="9"
- *     zones='[{"from":0,"to":140,"color":"#22c55e"},
- *             {"from":140,"to":200,"color":"#eab308"},
- *             {"from":200,"to":240,"color":"#ef4444"}]'></o-meter>
- *
- * Zones are given in value units (min..max). The needle and tick layers are
- * cheap to patch, so changing `value` only re-points the needle (no rebuild).
- */
-import { OrbitKitElement, define } from './base.js';
+import { OrbitKitElement, define, finiteNumber, cssValue, escapeHTML as e } from './base.js';
 
+/** Basic needle gauge retained alongside the richer o-instrument presets. */
 export class OrbitMeter extends OrbitKitElement {
   static get observedAttributes() {
-    return ['value', 'min', 'max', 'range', 'from', 'size', 'ticks',
-            'zones', 'fill', 'unit', 'label', 'needle-color', 'glow'];
+    return ['value', 'min', 'max', 'range', 'from', 'size', 'ticks', 'zones', 'fill', 'unit', 'label', 'needle-color', 'glow'];
   }
-
   readConfig() {
-    const range = this._num('range', 270);
-    const min = this._num('min', 0);
-    const max = this._num('max', 100);
-    const span = (max - min) || 1;
-    const zones = (this._json('zones', []) || []).map((z) => ({
-      from: Number(z.from) || 0,
-      to: Number(z.to) || 0,
-      color: z.color || '#6366f1'
-    }));
+    let min = this._num('min', 0), max = this._num('max', 100);
+    if (!(max > min) || !Number.isFinite(max - min)) { min = 0; max = 100; }
+    const range = Math.max(0, Math.min(360, this._num('range', 270)));
     return {
-      value: this._num('value', min),
-      min, max, span, range, zones,
+      value: this._num('value', min), min, max, span: max - min, range,
       from: this.hasAttribute('from') ? this._num('from', 0) : this._autoFrom(range),
-      size: this._str('size', '220px'),
-      ticks: Math.max(0, Math.round(this._num('ticks', 9))),
-      needleColor: this._str('needle-color', '#e5e7eb'),
-      unit: this._str('unit', ''),
-      glow: this.getAttribute('glow'),
-      label: this.hasAttribute('label') ? this.getAttribute('label') : null
+      zones: this._array('zones').map((z) => ({ from: Math.max(min, finiteNumber(z.from, min)), to: Math.min(max, finiteNumber(z.to, min)), color: cssValue(z.color, this._color('fill', '#6366f1')) })).filter((z) => z.to > z.from),
+      size: this._size('size', '220px'), ticks: Math.max(0, Math.min(360, Math.round(this._num('ticks', 9)))),
+      needleColor: this._color('needle-color', '#e5e7eb'), unit: this._str('unit', ''),
+      glow: this.getAttribute('glow'), label: this.getAttribute('label')
     };
   }
-
-  structuralSignature(cfg) {
-    // Everything except `value` and `label` is structural; the needle and the
-    // center readout are patched in sync() so the arc isn't rebuilt per frame.
-    const { value, label, ...rest } = cfg;
-    return JSON.stringify(rest);
-  }
-
+  structuralSignature({ value, label, unit, ...structure }) { return JSON.stringify(structure); }
   build(cfg) {
-    const ticks = Array.from({ length: cfg.ticks }, () => '<div class="vector"></div>').join('');
-
+    const frame = `--o-range:${cfg.range}deg;--o-from:${cfg.from}deg;`;
+    const ticks = cfg.ticks ? `<div class="orbit-6 ${cfg.range < 360 ? 'fit-range' : ''}" style="${frame}">${Array.from({ length: cfg.ticks }, () => '<div class="vector inner-orbit"></div>').join('')}</div>` : '';
     const zones = cfg.zones.map((z) => {
-      const pct = ((z.to - z.from) / cfg.span) * 100;
+      const from = cfg.from + (z.from - cfg.min) / cfg.span * cfg.range;
       const style = `--o-fill:${z.color};--o-stroke:${z.color};--o-stroke-width:6;--o-gap:0;${this._glow(z.color)}`;
-      return `<o-arc value="${pct.toFixed(4)}" style="${style}"></o-arc>`;
+      return `<div class="orbit-5" style="--o-range:${cfg.range}deg;--o-from:${from}deg;"><o-arc value="${((z.to - z.from) / cfg.span * 100).toFixed(4)}" style="${e(style)}"></o-arc></div>`;
     }).join('');
-
-    const zoneLayer = zones
-      ? `<div class="orbit-5" style="--o-range:${cfg.range}deg;--o-from:${cfg.from}deg;">${zones}</div>`
-      : '';
-
-    const tickLayer = cfg.ticks
-      ? `<div class="orbit-6 fit-range" style="--o-range:${cfg.range}deg;--o-from:${cfg.from}deg;">${ticks}</div>`
-      : '';
-
-    this.innerHTML = `
-      <div class="bigbang" style="width:${cfg.size};aspect-ratio:1;">
-        <div class="gravity-spot">
-          ${tickLayer}
-          ${zoneLayer}
-          <div class="orbit-4" style="--o-range:${cfg.range}deg;--o-from:${cfg.from}deg;">
-            <o-arc class="o-meter-needle" value="0" shape="arrow" style="--o-fill:${cfg.needleColor};--o-stroke:${cfg.needleColor}"></o-arc>
-          </div>
-          <div class="orbit-0">
-            <div class="satellite at-center">
-              <div class="capsule ok-hub o-meter-readout"></div>
-            </div>
-          </div>
-        </div>
-      </div>`;
-
+    this.innerHTML = `<div class="bigbang" style="width:${e(cfg.size)};aspect-ratio:1;height:auto;container-type:inline-size;">
+      <div class="gravity-spot" style="--o-force:calc(100cqw * 12 / 7);">
+        ${ticks}${zones}
+        <div class="orbit-0"><div class="vector outer-orbit grow-4x o-meter-needle" style="background:${e(cfg.needleColor)};height:3px;${e(this._glow(cfg.needleColor))}"></div></div>
+        <div class="orbit-0"><div class="satellite at-center"><div class="capsule ok-hub o-meter-readout"></div></div></div>
+      </div></div>`;
     this._needle = this.querySelector('.o-meter-needle');
     this._readout = this.querySelector('.o-meter-readout');
   }
-
   sync(cfg) {
-    const clamped = Math.min(cfg.max, Math.max(cfg.min, cfg.value));
-    const pct = ((clamped - cfg.min) / cfg.span) * 100;
-    if (this._needle) this._needle.setAttribute('value', pct.toFixed(2));
-    if (this._readout) {
-      this._readout.textContent = cfg.label !== null
-        ? cfg.label
-        : `${Math.round(clamped)}${cfg.unit}`;
-    }
+    const value = Math.min(cfg.max, Math.max(cfg.min, cfg.value));
+    const angle = cfg.from - 90 + (value - cfg.min) / cfg.span * cfg.range;
+    this._needle?.style.setProperty('--o-angle-composite', `${angle}deg`);
+    const text = cfg.label ?? `${Math.round(value)}${cfg.unit}`;
+    if (this._readout) this._readout.textContent = text;
+    this._describe(`${text}; ${value}${cfg.unit}, range ${cfg.min} to ${cfg.max}`);
   }
 }
-
 define('o-meter', OrbitMeter);

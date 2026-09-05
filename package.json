@@ -1,12 +1,13 @@
 {
   "name": "@zumer/orbit-kit",
   "version": "0.1.0",
-  "description": "High-level, declarative web components on top of the Orbit CSS framework — gauges, charts, activity rings, knobs, pie menus, cockpit instruments, analog clocks, compasses and radars, each in one tag.",
+  "description": "High-level, declarative web components on top of the Orbit CSS + JavaScript layout system \u2014 gauges, charts, activity rings, knobs, pie menus, cockpit instruments, analog clocks, compasses and radars, each in one tag.",
   "type": "module",
   "main": "src/orbit-kit.js",
   "module": "src/orbit-kit.js",
   "exports": {
     ".": "./src/orbit-kit.js",
+    "./src/*": "./src/*",
     "./*": "./src/*"
   },
   "files": [
@@ -16,9 +17,12 @@
     "./src/*.js"
   ],
   "scripts": {
-    "test": "node test/smoke.mjs",
+    "demo": "node scripts/demo.mjs",
+    "test": "npm run test:unit && npm run test:browser",
     "shots": "node test/shoot.mjs",
-    "shots:menus": "node test/shoot-menus.mjs"
+    "shots:menus": "node test/shoot-menus.mjs",
+    "test:unit": "node test/package.mjs && node test/smoke.mjs && node test/control-regressions.mjs && node test/data-regressions.mjs",
+    "test:browser": "node test/browser.mjs"
   },
   "peerDependencies": {
     "@zumer/orbit": "^1.4.9"

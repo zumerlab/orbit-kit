@@ -65,6 +65,7 @@ function make(Cls, attrs) {
 }
 
 // ---- run --------------------------------------------------------------------
+const { OrbitGauge } = await import('../src/o-gauge.js');
 const { OrbitDonut } = await import('../src/o-donut.js');
 const { OrbitRings } = await import('../src/o-rings.js');
 const { OrbitMeter } = await import('../src/o-meter.js');
@@ -74,6 +75,14 @@ const { OrbitCompass } = await import('../src/o-compass.js');
 const { OrbitRadar } = await import('../src/o-radar.js');
 const { OrbitClock } = await import('../src/o-clock.js');
 const { OrbitInstrument } = await import('../src/o-instrument.js');
+
+console.log('\no-gauge');
+{
+  const el = make(OrbitGauge, { value: '0', size: '200px', unit: '%' });
+  el._render();
+  check('gauge renders an initially empty fill', el.innerHTML.includes('o-gauge-fill'));
+  check('gauge supports shared base lifecycle', typeof el.readConfig === 'function' && typeof el.sync === 'function');
+}
 
 console.log('\no-donut');
 {
@@ -114,9 +123,9 @@ console.log('\no-meter');
     zones: '[{"from":0,"to":140,"color":"#22c55e"},{"from":140,"to":200,"color":"#eab308"},{"from":200,"to":240,"color":"#ef4444"}]' });
   el._render();
   const h = el.innerHTML;
-  check('renders 9 ticks', (h.match(/class="vector"/g) || []).length === 9);
-  check('renders 3 zone arcs + needle', (h.match(/<o-arc/g) || []).length === 4);
-  check('needle shape arrow', h.includes('shape="arrow"'));
+  check('renders 9 ticks', (h.match(/class="vector inner-orbit"/g) || []).length === 9);
+  check('renders 3 zone arcs + an independent vector needle', (h.match(/<o-arc/g) || []).length === 3 && h.includes('o-meter-needle'));
+  check('needle remains a vector at value zero', h.includes('o-meter-needle') && h.includes('vector outer-orbit'));
   check('auto from for 270 range', h.includes('--o-from:225deg'), 'range 270 -> from 225');
 }
 
@@ -199,7 +208,7 @@ console.log('\no-compass');
   check('first cardinal (N) is accented', h.includes('ok-cmp-card north'));
   check('36-tick scale + dial + lubber', (h.match(/ok-cmp-tick/g) || []).length >= 36 && h.includes('ok-cmp-dial') && h.includes('ok-cmp-lubber'));
   check('no fit-range on the 360 card (overlap bug)', !h.includes('fit-range'));
-  check('force-scaled so it fits the box', h.includes('--o-force:440.0px')); // 220*12/6
+  check('force-scaled so it fits the box', h.includes('--o-force:calc(100cqw')); // 220*12/6
   // heading 45 → card rotated -45°, readout "045°" NE.
   check('card rotates to heading', el._cards.style._p['--o-from'] === '-45deg');
   check('readout shows degrees + point', el._deg.textContent === '045°' && el._sub.textContent === 'NE');
@@ -210,8 +219,8 @@ console.log('\no-radar');
   const el = make(OrbitRadar, { rings: '3', spokes: '8', targets: '[{"angle":60,"dist":0.8},{"angle":200,"dist":0.4}]', label: 'SCAN' });
   el._render();
   const h = el.innerHTML;
-  check('range rings drawn as orbit borders', (h.match(/border:1px solid rgba\(/g) || []).length === 3, '3 native orbit rings');
-  check('renders 8 cross-hair spokes', (h.match(/class="vector"/g) || []).length === 8);
+  check('range rings drawn as orbit borders', (h.match(/border:1px solid color-mix\(/g) || []).length === 3, '3 native orbit rings');
+  check('renders 8 cross-hair spokes', (h.match(/class="vector ok-radar-spoke"/g) || []).length === 8);
   check('sweep is a rotating conic-gradient beam', h.includes('o-radar-sweep') && h.includes('conic-gradient'));
   check('sweep width drives the beam angle', (() => {
     const wide = make(OrbitRadar, { rings: '3', 'sweep-width': '180' });
@@ -219,8 +228,8 @@ console.log('\no-radar');
     return wide.innerHTML.includes('180deg');
   })());
   check('renders 2 blips', (h.match(/o-radar-blip/g) || []).length === 2);
-  check('blip aimed via angle-composite', h.includes('--o-angle-composite:calc(60deg - 90deg)'));
-  check('hex->rgba conversion', h.includes('rgba('));
+  check('blip aimed via angle-composite', h.includes('--o-angle-composite:-30deg'));
+  check('scope alpha supports arbitrary CSS colors', h.includes('color-mix(in srgb'));
 }
 
 console.log('\no-clock');
@@ -243,7 +252,7 @@ console.log('\no-clock (variants)');
   plain._render();
   check('no second hand unless requested', !plain.innerHTML.includes('ok-clock-sec'));
   check('default case is round', plain.innerHTML.includes('ok-clock-case--round'));
-  check('force scales dial to size (orbit-11)', plain.innerHTML.includes('--o-force:327.3px'));
+  check('force scales dial to size (orbit-11)', plain.innerHTML.includes('--o-force:calc(100cqw'));
 
   const bare = make(OrbitClock, { time: '12:00', numerals: 'none' });
   bare._render();
@@ -267,14 +276,13 @@ console.log('\no-clock (cases, oval, complications, presets)');
 
   const rect = make(OrbitClock, { time: '12:00', case: 'rectangle', size: '240px' });
   rect._render();
-  // caseW = 240 + 2*round(240*.08)=240+38=278; caseH = 278 + round(240*.26)=278+62=340
-  check('rectangle case is taller than wide', rect.innerHTML.includes('width:278px;height:340px'));
+  check('rectangle case is taller than wide', rect.innerHTML.includes('width:240px;aspect-ratio:100 / 126'));
 
   const tonneau = make(OrbitClock, { time: '12:00', case: 'rectangle', dial: 'oval', size: '240px' });
   tonneau._render();
-  // tall case (278x340) → tall dial: ellipse-y = 278/340 = 0.818, ellipse-x = 1.
+  // The dial follows the same vertical ratio as its responsive rectangular case.
   check('tonneau dial elongates vertically (matches case)',
-    tonneau.innerHTML.includes('--o-ellipse-x:1;--o-ellipse-y:0.818'));
+    tonneau.innerHTML.includes('--o-ellipse-x:1;--o-ellipse-y:0.794'));
   check('tonneau is NOT a sideways oval', !tonneau.innerHTML.includes('--o-ellipse-x:.78'));
 
   const comp = make(OrbitClock, { time: '09:41:30', digital: '', date: '', brand: 'ORBIT' });
@@ -315,7 +323,7 @@ console.log('\no-clock (chronograph sub-dials)');
   check('chrono preset renders three sub-dials', h.includes('ok-sub-sec') && h.includes('ok-sub-h24') && h.includes('ok-sub-date'));
   check('sub-dials are nested gravity-spots', (h.match(/gravity-spot/g) || []).length >= 4);
   check('sub-dials sit at 3/6/9', h.includes('angle-270') && h.includes('angle-90') && h.includes('angle-180'));
-  check('sub-dial nested force keeps them small', h.includes('--o-force:288.0px'));
+  check('sub-dial nested force keeps them small', h.includes('--o-force:calc(100cqw'));
   // 09:41:30 → small-seconds sub-hand at 30*6-90 = 90deg.
   check('sub-second hand is driven live', ch._subSec.style._p['--o-angle-composite'] === '90deg');
   // 24h sub-hand: ((9+41/60)/24)*360-90 = 55.25deg.
@@ -333,7 +341,7 @@ console.log('\no-instrument');
   tach._render();
   const h = tach.innerHTML;
   check('9 major ticks (0..8)', (h.match(/ok-inst-tick-M/g) || []).length === 9);
-  check('minor ticks fill between majors', (h.match(/ok-inst-tick"/g) || []).length === (9 - 1) * 5 + 1);
+  check('five minor ticks between each pair of majors', (h.match(/ok-inst-tick"/g) || []).length === (9 - 1) * (5 + 1) + 1);
   check('numeric scale label "8" present', h.includes('>8</div>'));
   check('redline zone rendered', h.includes(`--o-fill:#ef4444`));
   check('needle is a full-length vector (not a zero-length arc)', h.includes('ok-inst-needle') && !h.includes('shape="arrow"'));

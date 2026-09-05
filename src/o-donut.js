@@ -1,100 +1,76 @@
-/**
- * <o-donut> — data-driven donut / pie chart.
- *
- * Collapses the Orbit recipe:
- *
- *   .bigbang > .gravity-spot
- *     ├── .orbit-N > <o-arc> × segments   (each arc stacks onto the previous)
- *     └── .orbit-0 > .satellite.at-center > .capsule   (center label)
- *
- * ...into one tag fed by a JSON array:
- *
- *   <o-donut data='[{"value":52,"color":"#f97316","label":"Rent"},
- *                   {"value":28,"color":"#eab308"},
- *                   {"value":20,"color":"#22c55e"}]'
- *            label="$2.4k" unit=""></o-donut>
- *
- * Segments are normalized to the sum of their values (so they fill the ring),
- * unless `total` is given — then values are taken as a fraction of `total`,
- * leaving an empty remainder (partial donut).
- */
-import { OrbitKitElement, define } from './base.js';
+import { OrbitKitElement, define, finiteNumber, cssValue, escapeHTML as e } from './base.js';
 
+const PALETTE = ['#6366f1', '#22c55e', '#eab308', '#f97316', '#ef4444', '#06b6d4', '#a855f7', '#ec4899'];
+
+/** Data-driven donut. Tracks are separate from the segment stack. */
 export class OrbitDonut extends OrbitKitElement {
   static get observedAttributes() {
-    return ['data', 'size', 'orbit', 'stroke-width', 'gap', 'track',
-            'range', 'from', 'label', 'unit', 'total', 'glow'];
+    return ['data', 'size', 'orbit', 'stroke-width', 'gap', 'track', 'range', 'from', 'label', 'unit', 'total', 'shape', 'glow'];
   }
 
   readConfig() {
-    const range = this._num('range', 360);
-    const data = (this._json('data', []) || []).map((d) => ({
-      value: Number(d.value) || 0,
-      color: d.color || null,
-      label: d.label != null ? String(d.label) : null
+    const data = this._array('data').map((d, i) => ({
+      value: Math.max(0, finiteNumber(d.value)), color: cssValue(d.color, PALETTE[i % PALETTE.length]),
+      label: d.label == null ? null : String(d.label)
     }));
-    const sum = data.reduce((a, d) => a + d.value, 0) || 1;
-    const total = this._num('total', sum);
+    // Normalize through a scaled sum to avoid overflow on large finite values.
+    const largest = data.reduce((n, d) => Math.max(n, d.value), 1);
+    const sum = data.reduce((n, d) => n + d.value / largest, 0) * largest;
+    const requestedTotal = this._num('total', sum);
+    const total = requestedTotal > 0 ? requestedTotal : (sum || 1);
+    let remaining = 100;
+    const weightSum = data.reduce((n, d) => n + d.value / largest, 0) || 1;
+    for (const d of data) {
+      const pct = Number.isFinite(total) ? d.value / total * 100 : (d.value / largest) / weightSum * 100;
+      d.pct = Math.max(0, Math.min(remaining, pct));
+      remaining = Math.max(0, remaining - d.pct);
+    }
     return {
-      data,
-      total,
-      range,
-      from: this.hasAttribute('from') ? this._num('from', 0) : 0,
-      orbit: Math.round(this._num('orbit', 3)),
-      size: this._str('size', '200px'),
-      strokeWidth: this._num('stroke-width', 14),
-      gap: this._num('gap', 2),
-      shape: this._str('shape', 'none'),
-      track: this._str('track', 'rgba(255,255,255,.05)'),
-      unit: this._str('unit', ''),
-      glow: this.getAttribute('glow'),
-      label: this.hasAttribute('label') ? this.getAttribute('label') : null
+      data, total, range: Math.max(0, Math.min(360, this._num('range', 360))), from: this._num('from', 0),
+      orbit: Math.max(1, Math.round(this._num('orbit', 3))), size: this._size('size', '200px'),
+      strokeWidth: Math.max(0, this._num('stroke-width', 14)), gap: Math.max(0, this._num('gap', 2)),
+      shape: this._str('shape', 'none'), track: this._color('track', 'rgba(255,255,255,.05)'),
+      unit: this._str('unit', ''), glow: this.getAttribute('glow'), label: this.getAttribute('label')
     };
   }
 
-  structuralSignature(cfg) {
-    // Re-render the whole subtree whenever the data or geometry changes;
-    // segment count and arc values are all structural here.
-    return JSON.stringify(cfg);
+  structuralSignature({ data, total, label, unit, ...structure }) {
+    return JSON.stringify({ ...structure, count: data.length });
   }
 
   build(cfg) {
-    const palette = ['#6366f1', '#22c55e', '#eab308', '#f97316', '#ef4444',
-                     '#06b6d4', '#a855f7', '#ec4899'];
-
-    const segments = cfg.data.map((d, i) => {
-      const pct = (d.value / cfg.total) * 100;
-      const color = d.color || palette[i % palette.length];
-      const style = [
-        `--o-fill:${color}`,
-        `--o-stroke:${color}`,
-        `--o-stroke-width:${cfg.strokeWidth}`,
-        `--o-gap:${cfg.gap}`,
-        this._glow(color)
-      ].join(';');
-      const title = d.label ? ` title="${d.label}: ${d.value}"` : '';
-      return `<o-arc value="${pct.toFixed(4)}" shape="${cfg.shape}" style="${style}"${title}></o-arc>`;
+    const ring = `--o-range:${cfg.range}deg;--o-from:${cfg.from}deg;`;
+    const segments = cfg.data.map((d) => {
+      const style = `--o-fill:${d.color};--o-stroke:${d.color};--o-stroke-width:${cfg.strokeWidth};--o-gap:${cfg.gap};${this._glow(d.color)}`;
+      return `<o-arc class="ok-donut-segment" value="${d.pct.toFixed(4)}" shape="${e(cfg.shape)}" style="${e(style)}" title="${e(d.label ?? '')}: ${d.value}"></o-arc>`;
     }).join('');
-
-    // Faint full-circle track underneath the segments (rounded to match).
-    const track = cfg.track && cfg.track !== 'transparent'
-      ? `<o-arc value="100" style="--o-fill:${cfg.track};--o-stroke:${cfg.track};--o-stroke-width:${cfg.strokeWidth}"></o-arc>`
-      : '';
-
-    const center = cfg.label !== null
-      ? `<div class="orbit-0"><div class="satellite at-center"><div class="capsule ok-hub">${cfg.label}${cfg.unit}</div></div></div>`
-      : '';
-
+    const track = cfg.track !== 'transparent'
+      ? `<div class="orbit-${cfg.orbit}" style="${ring}"><o-arc value="100" style="${e(`--o-fill:${cfg.track};--o-stroke:${cfg.track};--o-stroke-width:${cfg.strokeWidth}`)}"></o-arc></div>` : '';
     this.innerHTML = `
-      <div class="bigbang" style="width:${cfg.size};aspect-ratio:1;">
-        <div class="gravity-spot">
-          <div class="orbit-${cfg.orbit}" style="--o-range:${cfg.range}deg;--o-from:${cfg.from}deg;">
-            ${track}${segments}
-          </div>
-          ${center}
+      <div class="bigbang" style="width:${e(cfg.size)};aspect-ratio:1;height:auto;container-type:inline-size;">
+        <div class="gravity-spot" style="--o-force:calc(100cqw * 12 / ${cfg.orbit + 1});">
+          ${track}<div class="orbit-${cfg.orbit}" style="${ring}">${segments}</div>
+          <div class="orbit-0"><div class="satellite at-center"><div class="capsule ok-hub">${e(cfg.label ?? '')}${cfg.label == null ? '' : e(cfg.unit)}</div></div></div>
         </div>
       </div>`;
+    this._segments = [...this.querySelectorAll('.ok-donut-segment')];
+    this._center = this.querySelector('.ok-hub');
+  }
+
+  sync(cfg) {
+    this._segments?.forEach((arc, i) => {
+      const d = cfg.data[i];
+      arc.setAttribute('value', d.pct.toFixed(4));
+      arc.setAttribute('title', `${d.label ?? `Segment ${i + 1}`}: ${d.value}${cfg.unit}`);
+      arc.style.setProperty('--o-fill', d.color);
+      arc.style.setProperty('--o-stroke', d.color);
+      if (cfg.glow != null) arc.style.setProperty('filter', `drop-shadow(0 0 ${Math.max(0, this._num('glow', 6))}px ${d.color})`);
+    });
+    if (this._center) {
+      this._center.textContent = cfg.label == null ? '' : `${cfg.label}${cfg.unit}`;
+      this._center.hidden = cfg.label == null;
+    }
+    this._describe([cfg.label, ...cfg.data.map((d, i) => `${d.label ?? `Segment ${i + 1}`}: ${d.value}${cfg.unit}`)].filter(Boolean).join('; ') || 'Empty donut chart');
   }
 }
-
 define('o-donut', OrbitDonut);

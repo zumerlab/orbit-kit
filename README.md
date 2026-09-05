@@ -1,9 +1,10 @@
 # @zumer/orbit-kit
 
 High-level, declarative web components built on top of the
-[Orbit](https://github.com/zumerlab/orbit) CSS framework.
+[Orbit](https://github.com/zumerlab/orbit) CSS + JavaScript layout system.
 
-Orbit gives you **primitives** — a CSS engine for radial layout. It's powerful,
+Orbit gives you **primitives** — CSS for presentation and JavaScript for radial
+layout, ordering and updates. It's powerful,
 but composing a single widget means nesting five levels
 (`.bigbang > .gravity-spot > .orbit-N > .satellite > .capsule`) and getting the
 rules exactly right. That depth is the main barrier to entry, for humans *and*
@@ -40,7 +41,7 @@ npm install @zumer/orbit @zumer/orbit-kit
 ```
 
 ```js
-import '@zumer/orbit/style'   // Orbit CSS engine
+import '@zumer/orbit/style'   // Orbit presentation
 import '@zumer/orbit'         // Orbit core web components (<o-arc>, <o-progress>)
 import '@zumer/orbit-kit'     // registers every kit component
 ```
@@ -61,8 +62,8 @@ any framework (React, Vue, Svelte, Angular). Import the whole kit, or just the
 components you use:
 
 ```js
-import '@zumer/orbit-kit/src/o-gauge.js'
-import '@zumer/orbit-kit/src/o-clock.js'
+import '@zumer/orbit-kit/o-gauge.js'
+import '@zumer/orbit-kit/o-clock.js'
 ```
 
 ---
@@ -83,8 +84,8 @@ import '@zumer/orbit-kit/src/o-clock.js'
 
 Common conventions across the kit:
 
-- **`size`** sets the widget's pixel width (square aspect). Components scale
-  Orbit's `--o-force` internally so they actually fill that box.
+- **`size`** sets the widget width with a CSS length (`200px`, `12rem`, `100%`,
+  `calc(...)`, or `var(...)`). The rings follow their container when it resizes.
 - **`glow`** is an opt-in neon drop-shadow tinted with the indicator color
   (`glow` or `glow="12"` for the blur radius).
 - **`data` / `items` / `zones` / `targets`** take a JSON array in the attribute.
@@ -171,7 +172,10 @@ solid track in its own color.
 
 ### `<o-knob>`
 
-An interactive rotary control that behaves like a form input.
+An interactive rotary slider with a numeric `value` property. It is a standalone
+control: it does not submit a value with HTML forms or implement native form
+validation/reset. To submit it, synchronize its value to your form model or a
+hidden input.
 
 ```html
 <o-knob value="65" unit="%" fill="#3da9fc"></o-knob>
@@ -183,8 +187,13 @@ knob.addEventListener('change', e => console.log(e.detail.value)); // on release
 knob.value = 40;                                                   // read / write
 ```
 
-Drag vertically, scroll the wheel, or use arrow keys / Page Up·Down / Home·End
-when focused. `role="slider"` + ARIA values are set for you.
+Drag vertically, scroll the wheel while focused, or use arrow keys / Page Up·Down
+/ Home·End. `role="slider"`, ARIA values, disabled state and a default accessible
+name are set for you. Use `aria-label` or `aria-labelledby` for a meaningful name.
+Values snap relative to `min`, stay within the range, and preserve decimals;
+Home and End always reach the endpoints. Nonpositive `step` becomes `1`; a `max`
+below `min` becomes `min`. Programmatic value updates work while disabled.
+`input` fires for value changes; `change` fires after a changed gesture.
 
 | Attribute | Default | Description |
 |---|---|---|
@@ -196,7 +205,7 @@ when focused. `role="slider"` + ARIA values are set for you.
 | `fill` | `#a1a1aa` | Value color. |
 | `track` | `#27272a` | Track color. |
 | `stroke-width` | `14` | Ring thickness. |
-| `unit` / `label` | — | Center readout. |
+| `unit` / `label` | — | Value suffix / center readout override. `label` supplies the default accessible name. |
 | `disabled` | off | Non-interactive + dimmed. |
 | `glow` | off | Neon glow on the value arc. |
 
@@ -236,7 +245,18 @@ menu.back(); menu.reset(); menu.path;             // navigation API
 | `gap` | `6` | Spacing between sectors. |
 | `label` | `MENU` | Center / breadcrumb text. |
 
-Keyboard: arrows move focus, Enter activates, Esc / Backspace goes back.
+Keyboard: arrows cycle through visible items, Home / End move to the first /
+last item, Enter / Space activate, and Esc / Backspace goes back. Tab enters the
+menu once and then exits; opening a branch moves focus to its children and going
+back restores the parent item. Icon-only items keep their label as an accessible
+name. `navigate` fires whenever the open path changes. `selectedIndex` returns
+the selected leaf index in the current level, or `-1` when the selected leaf is
+in another level.
+
+Labels are rendered as text. `icon` accepts emoji/text or sanitized inline SVG:
+only basic SVG shapes and presentation attributes are retained. Scripts, event
+handlers, links, external resources, embedded HTML and arbitrary HTML are removed
+or rendered as text. Invalid item arrays/children are ignored.
 
 ---
 
@@ -362,9 +382,11 @@ conic-gradient sweep, and glowing blips.
 ## How it works
 
 orbit-kit components render their structure into the **light DOM** (not shadow
-DOM) on purpose. Orbit positions elements through global CSS (`cos()` / `sin()`
-/ `:has()`) and inherited `--o-*` custom properties, so a layout-composing
-component must live in the light DOM for the engine and the cascade to reach it.
+DOM) on purpose. Orbit combines global CSS (`cos()` / `sin()` / `:has()`) and
+inherited `--o-*` custom properties with a JavaScript layout scheduler. The
+scheduler discovers rings, assigns counts/order and redraws SVG after data,
+CSS or container changes. The kit uses the light DOM so the CSS cascade and
+runtime can reach the composed layout.
 The generated markup is exactly the documented Orbit structure — "view source"
 stays honest. Inspect any component in devtools to see the rings, satellites and
 arcs it expands into.
@@ -377,17 +399,55 @@ attributes above just map onto them.
 Live showcase of every component: **[zumerlab.com/orbit-kit](https://zumerlab.com/orbit-kit)**
 (source in [`docs/index.html`](docs/index.html)).
 
-To run it locally, serve the repo over HTTP so the ES modules load:
+To try your local changes, build the sibling Orbit checkout and start the demo:
 
 ```bash
-npx serve .
-# then open /docs/index.html
+(cd ../orbit && npm run compile)
+npm run demo
+# open http://127.0.0.1:5173
 ```
+
+The demo serves this checkout's components and the sibling Orbit build, replacing
+the gallery's CDN asset URLs. It never loads a published package in their place.
+Set `ORBIT_DIR=/path/to/orbit` to choose another core checkout and `PORT=5174` to
+change the port. If there is no sibling checkout, it uses the installed core in
+`node_modules/@zumer/orbit`. Reload after edits; recompile Orbit when its source
+changes. Try dragging the knob, using its arrow keys, and opening the nested menus.
+
+## Development and checks
+
+```bash
+npm install
+npx playwright install chromium firefox webkit
+npm run test:unit
+ORBIT_DIR=../orbit npm test
+```
+
+`npm test` runs Node checks and real browser regressions. The browser suite loads
+local assets only: `ORBIT_DIR` points at an Orbit checkout with a fresh `dist/`;
+without it, tests use `node_modules/@zumer/orbit`. Chromium is required. Firefox
+and WebKit run when installed; set `BROWSERS=chromium,firefox,webkit` to require
+all three. Browser tests assert keyboard/pointer behavior, focus, ARIA, data
+safety, reactive layout and sizing. Screenshot scripts are optional visual aids:
+
+```bash
+ORBIT_DIR=../orbit npm run shots
+ORBIT_DIR=../orbit npm run shots:menus
+```
+
+They save captures in `.shots/`, print the exact core path used, and fail on
+console errors, page errors or missing local package assets. They never fall back
+to a CDN build when a local file is missing.
+
+The fixes on this branch depend on the matching updated Orbit runtime. Build
+the core before testing against its checkout. Publish the kit and compatible
+core builds together; the current package versions have not been advanced.
 
 ## Browser support
 
 Modern evergreen browsers. Orbit relies on `:has()` and CSS trigonometric
-functions (`cos`, `sin`); the radar/clock visuals use `conic-gradient` and
+functions (`cos`, `sin`), container query units and ResizeObserver; the
+radar/clock visuals use `conic-gradient` and
 `color-mix`. Orbit shows an upgrade notice on unsupported browsers.
 
 ## License

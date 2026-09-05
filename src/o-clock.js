@@ -23,7 +23,7 @@
  * Hands/readouts are patched in place every frame/second; the structure is
  * rebuilt only when the face itself changes.
  */
-import { OrbitKitElement, define, injectStyleOnce } from './base.js';
+import { OrbitKitElement, define, injectStyleOnce, escapeHTML as e } from './base.js';
 
 const CLOCK_CSS = `
 o-clock .ok-clock-case {
@@ -62,8 +62,8 @@ o-clock .ok-subdial-hand { background: var(--ok-clock-accent, #ef4565); height: 
 o-clock .ok-subdial-cap  { background: var(--ok-clock-tick-h, #e6edf3); }
 o-clock .ok-subdial-label{ font-size: .4em; opacity: .55; letter-spacing: .1em; text-transform: uppercase; }
 o-clock.ok-glow .ok-clock-hour,
-o-clock.ok-glow .ok-clock-min  { filter: drop-shadow(0 0 4px var(--ok-clock-hand, #e6edf3)); }
-o-clock.ok-glow .ok-clock-sec  { filter: drop-shadow(0 0 5px var(--ok-clock-accent, #ef4565)); }
+o-clock.ok-glow .ok-clock-min  { filter: drop-shadow(0 0 var(--ok-clock-glow, 4px) var(--ok-clock-hand, #e6edf3)); }
+o-clock.ok-glow .ok-clock-sec  { filter: drop-shadow(0 0 var(--ok-clock-glow, 5px) var(--ok-clock-accent, #ef4565)); }
 `;
 
 const ROMAN = ['XII', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI'];
@@ -84,7 +84,8 @@ export class OrbitClock extends OrbitKitElement {
   static get observedAttributes() {
     return ['time', 'live', 'smooth', 'seconds', 'numerals', 'size', 'preset',
             'case', 'dial', 'digital', 'date', 'brand', 'subdials',
-            'face', 'bezel', 'case-bg', 'hand-color', 'accent', 'tick-color', 'glow'];
+            'face', 'bezel', 'case-bg', 'hand-color', 'accent', 'tick-color', 'glow',
+            'hour-color', 'minute-color', 'second-color'];
   }
 
   /** Resolve a string attribute against the active preset, then a hard default. */
@@ -107,7 +108,7 @@ export class OrbitClock extends OrbitKitElement {
     const smooth = this._flag('smooth');
     return {
       time: this._str('time', null),
-      live: this.hasAttribute('live'),
+      live: this._flag('live'),
       smooth,
       seconds: this._flag('seconds') || smooth,
       numerals: this._opt('numerals', 'arabic'),
@@ -118,58 +119,45 @@ export class OrbitClock extends OrbitKitElement {
       date: this._flag('date'),
       subdials: this._flag('subdials'),
       brand: this._opt('brand', null),
-      size: this._str('size', '300px'),
-      glow: this.hasAttribute('glow'),
-      theme: ['face', 'bezel', 'case-bg', 'hand-color', 'accent', 'tick-color']
+      size: this._size('size', '300px'),
+      glow: this.getAttribute('glow'),
+      theme: ['face', 'bezel', 'case-bg', 'hand-color', 'accent', 'tick-color', 'hour-color', 'minute-color', 'second-color']
         .map((a) => this.getAttribute(a)).join('|')
     };
   }
 
   structuralSignature(cfg) {
     // Hands + digital/date/sub-dial readouts are patched live; only the face rebuilds.
-    const { time, ...rest } = cfg;
+    const { time, live, smooth, ...rest } = cfg;
     return JSON.stringify(rest);
   }
 
   build(cfg) {
     injectStyleOnce('orbit-kit-clock', CLOCK_CSS);
-    this.classList.toggle('ok-glow', cfg.glow);
-    this._ringTime = null; // reset face mode each build
+    this.classList.toggle('ok-glow', cfg.glow != null);
+    this._ringTime = this._ringH = this._ringM = this._ringS = null; // reset face mode each build
 
     // Convenience attributes mirror the CSS custom properties.
     const map = {
       face: '--ok-clock-face', bezel: '--ok-clock-bezel', 'case-bg': '--ok-clock-case-bg',
       'hand-color': '--ok-clock-hand', accent: '--ok-clock-accent', 'tick-color': '--ok-clock-tick'
     };
-    for (const [attr, prop] of Object.entries(map)) {
-      const v = this.getAttribute(attr);
-      if (v != null) this.style.setProperty(prop, v);
-    }
-    if (this.getAttribute('accent') == null) {
-      const p = PRESETS[this.getAttribute('preset')];
-      if (p && p.accent) this.style.setProperty('--ok-clock-accent', p.accent);
-    }
+    const overrides = Object.fromEntries(Object.entries(map).map(([attr, prop]) => [prop, this.getAttribute(attr)]));
+    overrides['--ok-clock-accent'] = this.getAttribute('accent') ?? PRESETS[this.getAttribute('preset')]?.accent ?? null;
+    overrides['--ok-clock-glow'] = cfg.glow == null ? null : `${Math.max(0, this._num('glow', 5))}px`;
+    this._applyTheme(overrides);
 
     if (cfg.ringsFace) { this._buildRingsFace(cfg); return; }
 
     // Orbit sizes track --o-force (orbit-N diameter = N/12 * force), NOT the
     // box. The dial is orbit-11, so scale force to make it equal the requested
     // size. The case wraps the dial with extra frame for non-round shapes.
-    const dialPx = parseFloat(cfg.size) || 300;
-    const force = (dialPx * 12 / 11).toFixed(1);
-    const frame = cfg.caseShape === 'round' ? 0 : Math.round(dialPx * 0.08);
-    const caseW = dialPx + frame * 2;
-    const caseH = caseW + (cfg.caseShape === 'rectangle' ? Math.round(dialPx * 0.26) : 0);
-    const baseFont = (dialPx * 0.075).toFixed(1);
-
-    // Oval dial: stretch the orbits to match the CASE orientation so a tall
-    // (rectangle) case gives a tall dial (true tonneau), not a sideways oval.
-    let ellipse = '';
-    if (cfg.oval) {
-      if (caseH > caseW) ellipse = `--o-ellipse-x:1;--o-ellipse-y:${(caseW / caseH).toFixed(3)};`;
-      else if (caseW > caseH) ellipse = `--o-ellipse-x:${(caseH / caseW).toFixed(3)};--o-ellipse-y:1;`;
-      else ellipse = '--o-ellipse-x:1;--o-ellipse-y:.82;'; // square box → gentle vertical oval
-    }
+    // Query units resolve relative to the requested CSS width (including rem/%/calc).
+    const frame = cfg.caseShape === 'round' ? 0 : 8;
+    const dial = 100 - frame * 2;
+    const caseH = cfg.caseShape === 'rectangle' ? 126 : 100;
+    const force = `calc(${dial}cqw * 12 / 11)`;
+    const ellipse = cfg.oval ? `--o-ellipse-x:1;--o-ellipse-y:${cfg.caseShape === 'rectangle' ? (100 / caseH).toFixed(3) : '.82'};` : '';
 
     // --- ticks: 60 minute, 12 hour (overdraw every 5th) ---
     const minuteTicks = Array.from({ length: 60 }, () =>
@@ -187,7 +175,7 @@ export class OrbitClock extends OrbitKitElement {
 
     // --- complications (suppressed when sub-dials own the lower face) ---
     const brand = cfg.brand
-      ? `<div class="orbit-4"><div class="satellite angle-0"><div class="capsule ok-clock-brand">${cfg.brand}</div></div></div>`
+      ? `<div class="orbit-4"><div class="satellite angle-0"><div class="capsule ok-clock-brand">${e(cfg.brand)}</div></div></div>`
       : '';
     const digital = (cfg.digital && !cfg.subdials)
       ? `<div class="orbit-4"><div class="satellite angle-180"><div class="capsule ok-clock-digital"></div></div></div>`
@@ -197,7 +185,7 @@ export class OrbitClock extends OrbitKitElement {
       : '';
 
     // --- sub-dials: chronograph tri-compax at 3/6/9 ---
-    const subForce = (dialPx * 0.96).toFixed(1);
+    const subForce = `calc(${dial}cqw * .96)`;
     const subdials = cfg.subdials
       ? this._subdial('sec', 'angle-270', subForce, 'S')   // 9 o'clock — small seconds
       + this._subdial('h24', 'angle-90', subForce, '24')   // 3 o'clock — 24-hour
@@ -210,9 +198,9 @@ export class OrbitClock extends OrbitKitElement {
       : '';
 
     this.innerHTML = `
-      <div class="ok-clock-case ok-clock-case--${cfg.caseShape}" style="width:${caseW}px;height:${caseH}px;font-size:${baseFont}px;">
-        <div class="bigbang" style="width:100%;height:100%;">
-          <div class="gravity-spot ok-clock-face" style="--o-force:${force}px;${ellipse}">
+      <div class="ok-clock-case ok-clock-case--${cfg.caseShape}" style="width:${e(cfg.size)};aspect-ratio:100 / ${caseH};container-type:inline-size;">
+        <div class="bigbang" style="width:100%;height:${caseH}cqw;">
+          <div class="gravity-spot ok-clock-face" style="--o-force:${force};font-size:${dial * .075}cqw;${ellipse}">
             <div class="orbit-11 ok-clock-dial"></div>
             <div class="orbit-10">${minuteTicks}</div>
             <div class="orbit-10">${hourTicks}</div>
@@ -248,7 +236,7 @@ export class OrbitClock extends OrbitKitElement {
     return `
       <div class="orbit-5">
         <div class="satellite ${angleClass}">
-          <div class="gravity-spot" style="--o-force:${subForce}px;">
+          <div class="gravity-spot" style="--o-force:${subForce};">
             <div class="orbit-3 ok-subdial-ring"></div>
             <div class="orbit-3">${ticks}</div>
             <div class="orbit-1"><div class="satellite angle-180"><div class="capsule ok-subdial-label">${label}</div></div></div>
@@ -268,32 +256,31 @@ export class OrbitClock extends OrbitKitElement {
     this._subSec = this._sub24 = this._subDate = this._digital = this._dateEl = null;
 
     const defs = [
-      { key: 'H', color: this.getAttribute('hour-color') || '#ff453a' },
-      { key: 'M', color: this.getAttribute('minute-color') || '#32d74b' }
+      { key: 'H', color: this._color('hour-color', '#ff453a') },
+      { key: 'M', color: this._color('minute-color', '#32d74b') }
     ];
-    if (cfg.seconds) defs.push({ key: 'S', color: this.getAttribute('second-color') || this.getAttribute('accent') || '#0a84ff' });
+    if (cfg.seconds) defs.push({ key: 'S', color: this._color('second-color', this._color('accent', '#0a84ff')) });
 
     const outer = 1 + defs.length;
-    const sizeNum = parseFloat(cfg.size) || 300;
-    const force = (sizeNum * 12 / (outer + 1)).toFixed(1);
-    const sw = Math.max(6, Math.round(sizeNum * 0.05));
+    const force = `calc(100cqw * 12 / ${outer + 1})`;
+    const sw = 12;
 
     const rings = defs.map((r, i) => {
       const orbit = outer - i;
       const track = `color-mix(in srgb, ${r.color} 14%, #0c0f14)`;
-      const glow = cfg.glow ? `filter:drop-shadow(0 0 5px ${r.color});` : '';
+      const glow = cfg.glow != null ? `filter:drop-shadow(0 0 ${Math.max(0, this._num('glow', 5))}px ${r.color});` : '';
       const fill = `--o-fill:${r.color};--o-stroke:${r.color};--o-stroke-width:${sw};${glow}`;
       // Solid track o-arc behind + o-progress value (o-progress back is hollow).
       return `<div class="orbit-${orbit}"><o-arc value="100" shape="rounded" style="--o-fill:${track};--o-stroke:${track};--o-stroke-width:${sw}"></o-arc></div>`
-        + `<div class="orbit-${orbit}"><o-progress class="ok-ring-${r.key}" value="0" max="100" shape="rounded" style="${fill}"></o-progress></div>`;
+        + `<div class="orbit-${orbit}"><o-progress class="ok-ring-${r.key}" value="0" max="100" shape="rounded" style="${e(fill)}"></o-progress></div>`;
     }).join('');
 
     this.innerHTML = `
-      <div class="bigbang" style="width:${cfg.size};aspect-ratio:1;">
-        <div class="gravity-spot" style="--o-force:${force}px;">
+      <div class="bigbang" style="width:${e(cfg.size)};aspect-ratio:1;height:auto;container-type:inline-size;">
+        <div class="gravity-spot" style="--o-force:${force};">
           ${rings}
           <div class="orbit-0"><div class="satellite at-center">
-            <div class="capsule ok-clock-ringtime" style="font-size:${(sizeNum * 0.13).toFixed(1)}px;"></div>
+            <div class="capsule ok-clock-ringtime" style="font-size:13cqw;"></div>
           </div></div>
         </div>
       </div>`;
@@ -317,15 +304,17 @@ export class OrbitClock extends OrbitKitElement {
   /** Point all hands and update digital/date readouts for a given Date. */
   _paint(date, smooth) {
     const h = date.getHours(), m = date.getMinutes();
+    this._describe(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(date.getSeconds()).padStart(2, '0')}`);
+    const text = (el, value) => { if (el && el.textContent !== value) el.textContent = value; };
     const s = smooth ? date.getSeconds() + date.getMilliseconds() / 1000 : date.getSeconds();
 
     // Rings face (iOS-style): fill concentric progress rings by time.
     if (this._ringTime) {
-      const setV = (el, frac) => el && el.setAttribute('value', (frac * 100).toFixed(2));
+      const setV = (el, frac) => { const v = (frac * 100).toFixed(2); if (el && el.getAttribute('value') !== v) el.setAttribute('value', v); };
       setV(this._ringH, ((h % 12) + m / 60) / 12);
       setV(this._ringM, (m + s / 60) / 60);
       setV(this._ringS, (s % 60) / 60);
-      this._ringTime.textContent = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+      text(this._ringTime, `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
       return;
     }
 
@@ -340,18 +329,20 @@ export class OrbitClock extends OrbitKitElement {
     set(this._subDate, ((date.getDate() - 1) / 31) * 360 - 90);
     // Digital / date readouts.
     if (this._digital) {
-      this._digital.textContent = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+      text(this._digital, `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
     }
-    if (this._dateEl) this._dateEl.textContent = String(date.getDate());
+    text(this._dateEl, String(date.getDate()));
   }
 
   /** Resolve the configured time: explicit `time="HH:MM[:SS]"` or now. */
   _resolveDate(cfg) {
-    if (cfg.time) {
-      const [hh, mm, ss] = cfg.time.split(':').map((n) => parseInt(n, 10));
-      const d = new Date();
-      d.setHours(hh || 0, mm || 0, ss || 0, 0);
-      return d;
+    if (!cfg.live && /^\d{1,2}:\d{2}(?::\d{2})?$/.test(cfg.time || '')) {
+      const [hh, mm, ss = 0] = cfg.time.split(':').map(Number);
+      if (hh < 24 && mm < 60 && ss < 60) {
+        const d = new Date();
+        d.setHours(hh, mm, ss, 0);
+        return d;
+      }
     }
     return new Date();
   }

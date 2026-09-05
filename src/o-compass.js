@@ -17,7 +17,7 @@
  *   <o-compass heading="45"></o-compass>
  *   <o-compass heading="120" labels="N,NE,E,SE,S,SW,W,NW"></o-compass>
  */
-import { OrbitKitElement, define, injectStyleOnce } from './base.js';
+import { OrbitKitElement, define, injectStyleOnce, escapeHTML as e } from './base.js';
 
 const CMP_CSS = `
 o-compass .ok-cmp-dial {
@@ -30,6 +30,7 @@ o-compass .ok-cmp-tick-M { background: #e6edf3; height: 2px; border-radius: 1px;
 o-compass .ok-cmp-card   { font-weight: 800; color: #e6edf3; }
 o-compass .ok-cmp-card.north { color: var(--ok-cmp-accent, #ef4444); }
 o-compass .ok-cmp-lubber {
+  filter: drop-shadow(0 0 var(--ok-cmp-glow, 0px) var(--ok-cmp-accent, #ef4444));
   width: 0; height: 0; border-left: 7px solid transparent; border-right: 7px solid transparent;
   border-top: 12px solid var(--ok-cmp-accent, #ef4444);
 }
@@ -51,26 +52,21 @@ export class OrbitCompass extends OrbitKitElement {
     return {
       heading: ((this._num('heading', 0) % 360) + 360) % 360,
       labels,
-      size: this._str('size', '220px'),
-      fill: this._str('fill', '#ef4444'),
+      size: this._size('size', '220px'),
+      fill: this._color('fill', '#ef4444'),
       unit: this._str('unit', '°'),
-      glow: this.hasAttribute('glow')
+      glow: this.getAttribute('glow')
     };
   }
 
   structuralSignature(cfg) {
-    const { heading, ...rest } = cfg;
+    const { heading, unit, ...rest } = cfg;
     return JSON.stringify(rest);
   }
 
   build(cfg) {
     injectStyleOnce('orbit-kit-compass', CMP_CSS);
-    this.style.setProperty('--ok-cmp-accent', cfg.fill);
-
-    // orbit-6 is the outermost ring; scale --o-force so it fills `size`.
-    const dialPx = parseFloat(cfg.size) || 220;
-    const force = (dialPx * 12 / 6).toFixed(1);
-    const baseFont = (dialPx * 0.07).toFixed(1);
+    this._applyTheme({ '--ok-cmp-accent': cfg.fill, '--ok-cmp-glow': cfg.glow == null ? null : `${Math.max(0, this._num('glow', 6))}px` });
 
     // 36 ticks every 10°; every 9th (90°) is a long cardinal tick.
     const ticks = Array.from({ length: 36 }, (_, i) =>
@@ -81,11 +77,11 @@ export class OrbitCompass extends OrbitKitElement {
     // while the ring's --o-from rotates only their POSITION. spin-lock would
     // over-rotate the letters once we drive --o-from for the heading.
     const cards = cfg.labels.map((l, i) =>
-      `<div class="satellite"><div class="capsule ok-cmp-card${i === 0 ? ' north' : ''}">${l}</div></div>`).join('');
+      `<div class="satellite"><div class="capsule ok-cmp-card${i === 0 ? ' north' : ''}">${e(l)}</div></div>`).join('');
 
     this.innerHTML = `
-      <div class="bigbang" style="width:${cfg.size};aspect-ratio:1;font-size:${baseFont}px;">
-        <div class="gravity-spot" style="--o-force:${force}px;">
+      <div class="bigbang" style="width:${e(cfg.size)};aspect-ratio:1;height:auto;container-type:inline-size;">
+        <div class="gravity-spot" style="--o-force:calc(100cqw * 12 / 6);font-size:7cqw;">
           <div class="orbit-6 ok-cmp-dial"></div>
           <div class="orbit-6 ok-cmp-rotor o-cmp-ticks" style="--o-from:0deg;">${ticks}</div>
           <div class="orbit-5 ok-cmp-rotor o-cmp-cards" style="--o-from:0deg;">${cards}</div>
@@ -107,8 +103,9 @@ export class OrbitCompass extends OrbitKitElement {
     const rot = `${-cfg.heading}deg`;
     if (this._ticks) this._ticks.style.setProperty('--o-from', rot);
     if (this._cards) this._cards.style.setProperty('--o-from', rot);
-    if (this._deg) this._deg.textContent = `${String(Math.round(cfg.heading)).padStart(3, '0')}${cfg.unit}`;
+    if (this._deg) this._deg.textContent = `${String(Math.round(cfg.heading) % 360).padStart(3, '0')}${cfg.unit}`;
     if (this._sub) this._sub.textContent = POINTS[Math.round(cfg.heading / 45) % 8];
+    this._describe(`Heading ${Math.round(cfg.heading) % 360}${cfg.unit}, ${POINTS[Math.round(cfg.heading / 45) % 8]}`);
   }
 }
 

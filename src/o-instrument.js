@@ -25,7 +25,7 @@
  * visible, even at zero) — pointed by `--o-angle-composite`. Only `value` is
  * cheap to change; the dial rebuilds when the scale, zones, case or theme change.
  */
-import { OrbitKitElement, define, injectStyleOnce } from './base.js';
+import { OrbitKitElement, define, injectStyleOnce, finiteNumber, arrayData, cssValue, escapeHTML as e } from './base.js';
 
 const RED = '#ef4444', YEL = '#eab308', GRN = '#22c55e', AMB = '#f59e0b', WHT = '#e5e7eb';
 
@@ -82,7 +82,7 @@ o-instrument .ok-inst-value  { font-weight: 800; font-variant-numeric: tabular-n
 o-instrument .ok-inst-unit   { font-size: .62em; opacity: .7; letter-spacing: .05em; }
 o-instrument .ok-inst-cap-label { font-size: .58em; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; opacity: .65; margin-top: .15em; }
 o-instrument .ok-inst-cap    { background: var(--ok-inst-accent, #e6edf3); box-shadow: 0 0 0 3px var(--ok-inst-hub, #0a0d12); }
-o-instrument.ok-glow .ok-inst-needle { filter: drop-shadow(0 0 5px var(--ok-inst-accent, #ef4444)); }
+o-instrument.ok-glow .ok-inst-needle { filter: drop-shadow(0 0 var(--ok-inst-glow, 5px) var(--ok-inst-accent, #ef4444)); }
 `;
 
 export class OrbitInstrument extends OrbitKitElement {
@@ -96,9 +96,8 @@ export class OrbitInstrument extends OrbitKitElement {
 
   _pNum(name, key, dflt) {
     const v = this.getAttribute(name);
-    if (v != null && v !== '') return parseFloat(v);
     const p = this._preset();
-    return p[key] != null ? p[key] : dflt;
+    return finiteNumber(v, p[key] != null ? p[key] : dflt);
   }
   _pStr(name, key, dflt) {
     const v = this.getAttribute(name);
@@ -108,22 +107,23 @@ export class OrbitInstrument extends OrbitKitElement {
   }
   _pArr(name, key, dflt) {
     const v = this.getAttribute(name);
-    if (v != null && v.trim() !== '') { try { return JSON.parse(v); } catch { /* fall through */ } }
+    if (v != null && v.trim() !== '') { try { const parsed = JSON.parse(v); if (Array.isArray(parsed)) return parsed; } catch { /* fall through */ } }
     const p = this._preset();
     return p[key] != null ? p[key] : dflt;
   }
 
   readConfig() {
-    const range = this._pNum('range', 'range', 270);
-    const min = this._pNum('min', 'min', 0);
-    const max = this._pNum('max', 'max', 100);
-    const span = (max - min) || 1;
-    const zones = (this._pArr('zones', 'zones', []) || []).map((z) => ({
-      from: Number(z.from), to: Number(z.to), color: z.color || RED
-    }));
+    const range = Math.max(0, Math.min(360, this._pNum('range', 'range', 270)));
+    let min = this._pNum('min', 'min', 0), max = this._pNum('max', 'max', 100);
+    if (!(max > min) || !Number.isFinite(max - min)) { min = 0; max = 100; }
+    const span = max - min;
+    const zones = arrayData(this._pArr('zones', 'zones', [])).map((z) => ({
+      from: Math.max(min, finiteNumber(z.from, min)), to: Math.min(max, finiteNumber(z.to, min)), color: cssValue(z.color, RED)
+    })).filter((z) => z.to > z.from);
     // `redline=` is sugar for a red zone from that value to max.
     const redline = this.getAttribute('redline');
-    if (redline != null) zones.push({ from: parseFloat(redline), to: max, color: RED });
+    const redlineValue = finiteNumber(redline, max);
+    if (redline != null && redlineValue < max) zones.push({ from: Math.max(min, redlineValue), to: max, color: RED });
 
     // Partial-sweep gauges (fuel/temp/…) read as an arc band, not a round watch,
     // so they default to a "bare" case (no round bezel) unless told otherwise.
@@ -135,52 +135,49 @@ export class OrbitInstrument extends OrbitKitElement {
     return {
       value: this._pNum('value', 'value', min),
       min, max, span, range, zones, caseShape, partial,
-      from: this.hasAttribute('from') ? this._pNum('from', null, 0) : (this._preset().from ?? this._autoFrom(range)),
-      ticks: Math.max(2, Math.round(this._pNum('ticks', 'ticks', 7))),
-      minor: Math.max(0, Math.round(this._pNum('minor', 'minor', 5))),
+      from: this.hasAttribute('from') ? this._pNum('from', null, 0) : (this._preset().from ?? (range === 360 ? 0 : this._autoFrom(range))),
+      ticks: Math.max(2, Math.min(360, Math.round(this._pNum('ticks', 'ticks', 7)))),
+      minor: Math.max(0, Math.min(60, Math.round(this._pNum('minor', 'minor', 5)))),
       tickLabels: this._pArr('tick-labels', 'tickLabels', null),
       unit: this._pStr('unit', 'unit', ''),
       label: this._pStr('label', 'label', ''),
       digital: this.hasAttribute('digital')
         ? this.getAttribute('digital') !== 'false'
         : (this._preset().digital !== false),
-      size: this._str('size', '240px'),
-      glow: this.hasAttribute('glow'),
-      accent: this._pStr('accent', 'accent', '#ef4444'),
+      size: this._size('size', '240px'),
+      glow: this.getAttribute('glow'),
+      accent: cssValue(this._pStr('accent', 'accent', '#ef4444'), '#ef4444'),
       theme: ['face', 'bezel', 'needle-color', 'tick-color'].map((a) => this.getAttribute(a)).join('|')
     };
   }
 
   structuralSignature(cfg) {
-    const { value, ...rest } = cfg;
+    const { value, unit, label, ...rest } = cfg;
     return JSON.stringify(rest);
   }
 
   build(cfg) {
     injectStyleOnce('orbit-kit-instrument', INST_CSS);
-    this.classList.toggle('ok-glow', cfg.glow);
+    this.classList.toggle('ok-glow', cfg.glow != null);
 
-    this.style.setProperty('--ok-inst-accent', cfg.accent);
-    const map = { face: '--ok-inst-face', bezel: '--ok-inst-bezel',
-                  'needle-color': '--ok-inst-accent', 'tick-color': '--ok-inst-tick' };
-    for (const [attr, prop] of Object.entries(map)) {
-      const v = this.getAttribute(attr);
-      if (v != null) this.style.setProperty(prop, v);
-    }
+    this._applyTheme({
+      '--ok-inst-accent': this.getAttribute('needle-color') ?? cfg.accent,
+      '--ok-inst-face': this.getAttribute('face'), '--ok-inst-bezel': this.getAttribute('bezel'),
+      '--ok-inst-tick': this.getAttribute('tick-color'),
+      '--ok-inst-glow': cfg.glow == null ? null : `${Math.max(0, this._num('glow', 5))}px`
+    });
 
-    const dialPx = parseFloat(cfg.size) || 240;
-    const force = (dialPx * 12 / 11).toFixed(1);
-    const frame = (cfg.caseShape === 'round' || cfg.caseShape === 'bare') ? 0 : Math.round(dialPx * 0.07);
-    const box = dialPx + frame * 2;
-    const baseFont = (dialPx * 0.072).toFixed(1);
+    const frame = (cfg.caseShape === 'round' || cfg.caseShape === 'bare') ? 0 : 7;
+    const dial = 100 - frame * 2;
+    const force = `calc(${dial}cqw * 12 / 11)`;
     const fromVar = `--o-range:${cfg.range}deg;--o-from:${cfg.from}deg;`;
 
     // Partial gauges (a 90° fuel arc) otherwise sit crammed in one quadrant.
     // Center the content by translating the gravity-spot so the arc's bounding
     // box (plus the center pivot) is centered in the square box.
     let centering = '';
-    if (cfg.partial) {
-      const R = dialPx * 5 / 11; // ≈ outer tick-ring radius
+    if (cfg.partial && cfg.caseShape === 'bare') {
+      const R = dial * 5 / 11; // ≈ outer tick-ring radius
       let minX = 0, maxX = 0, minY = 0, maxY = 0; // seed with the center pivot
       for (let k = 0; k <= 24; k++) {
         const p = (cfg.from + (cfg.range * k) / 24) * Math.PI / 180;
@@ -190,54 +187,54 @@ export class OrbitInstrument extends OrbitKitElement {
       }
       const dx = (-(minX + maxX) / 2 * R).toFixed(1);
       const dy = (-(minY + maxY) / 2 * R).toFixed(1);
-      centering = `transform:translate(${dx}px,${dy}px);`;
+      centering = `transform:translate(${dx}cqw,${dy}cqw);`;
     }
 
     // Face: a round dial for full sweeps, or a neutral track band for partial
     // gauges (so a quarter-arc fuel gauge isn't trapped in a round bezel).
-    const face = cfg.partial
+    const face = cfg.caseShape === 'bare'
       ? `<div class="orbit-9" style="${fromVar}"><o-arc value="100" style="--o-fill:var(--ok-inst-track,#171c24);--o-stroke:var(--ok-inst-track,#171c24);--o-stroke-width:8"></o-arc></div>`
       : '<div class="orbit-11 ok-inst-dial"></div>';
 
     // --- ticks: major (count) + minor (between) over the range ---
     const majorN = cfg.ticks;
-    const minorN = cfg.minor > 0 ? (majorN - 1) * cfg.minor + 1 : 0;
+    const closed = cfg.range === 360;
+    const fit = closed ? '' : 'fit-range';
+    const minorN = cfg.minor > 0 ? (closed ? majorN * (cfg.minor + 1) : (majorN - 1) * (cfg.minor + 1) + 1) : 0;
     const minorTicks = minorN
-      ? `<div class="orbit-10 fit-range" style="${fromVar}">${Array.from({ length: minorN }, () =>
+      ? `<div class="orbit-10 ${fit}" style="${fromVar}">${Array.from({ length: minorN }, () =>
           '<div class="vector inner-orbit shrink-80 ok-inst-tick"></div>').join('')}</div>`
       : '';
-    const majorTicks = `<div class="orbit-10 fit-range" style="${fromVar}">${Array.from({ length: majorN }, () =>
+    const majorTicks = `<div class="orbit-10 ${fit}" style="${fromVar}">${Array.from({ length: majorN }, () =>
       '<div class="vector inner-orbit shrink-55 ok-inst-tick-M"></div>').join('')}</div>`;
 
     // --- numeric / custom scale labels ---
     const labels = Array.from({ length: majorN }, (_, i) => {
       const txt = cfg.tickLabels ? (cfg.tickLabels[i] ?? '')
-        : this._fmtTick(cfg.min + (i * cfg.span) / (majorN - 1));
-      return `<div class="satellite"><div class="capsule ok-inst-num">${txt}</div></div>`;
+        : this._fmtTick(cfg.min + (i * cfg.span) / (closed ? majorN : majorN - 1));
+      return `<div class="satellite"><div class="capsule ok-inst-num">${e(txt)}</div></div>`;
     }).join('');
-    const labelRing = `<div class="orbit-8 fit-range" style="${fromVar}">${labels}</div>`;
+    const labelRing = `<div class="orbit-8 ${fit}" style="${fromVar}">${labels}</div>`;
 
     // --- color zones: each in its own orbit so non-contiguous zones land right ---
     const zones = cfg.zones.map((z) => {
       const startA = cfg.from + ((z.from - cfg.min) / cfg.span) * cfg.range;
       const pct = ((z.to - z.from) / cfg.span) * 100;
       const style = `--o-range:${cfg.range}deg;--o-from:${startA}deg`;
-      const arc = `--o-fill:${z.color};--o-stroke:${z.color};--o-stroke-width:5${cfg.glow ? `;filter:drop-shadow(0 0 4px ${z.color})` : ''}`;
-      return `<div class="orbit-9" style="${style}"><o-arc value="${pct.toFixed(3)}" style="${arc}"></o-arc></div>`;
+      const arc = `--o-fill:${z.color};--o-stroke:${z.color};--o-stroke-width:5${cfg.glow != null ? `;filter:drop-shadow(0 0 ${Math.max(0, this._num('glow', 4))}px ${z.color})` : ''}`;
+      return `<div class="orbit-9" style="${style}"><o-arc value="${pct.toFixed(3)}" style="${e(arc)}"></o-arc></div>`;
     }).join('');
 
-    const readout = cfg.digital || cfg.label
-      ? `<div class="orbit-4"><div class="satellite angle-180"><div class="capsule ok-inst-readout">
-           ${cfg.digital ? `<span class="ok-inst-value"></span>` : ''}
-           ${cfg.unit ? `<span class="ok-inst-unit">${cfg.unit}</span>` : ''}
-           ${cfg.label ? `<span class="ok-inst-cap-label">${cfg.label}</span>` : ''}
-         </div></div></div>`
-      : '';
+    const readout = `<div class="orbit-4"><div class="satellite angle-180"><div class="capsule ok-inst-readout">
+      ${cfg.digital ? '<span class="ok-inst-value"></span>' : ''}
+      <span class="ok-inst-unit">${e(cfg.unit)}</span>
+      <span class="ok-inst-cap-label">${e(cfg.label)}</span>
+    </div></div></div>`;
 
     this.innerHTML = `
-      <div class="ok-inst-case ok-inst-case--${cfg.caseShape}" style="width:${box}px;height:${box}px;font-size:${baseFont}px;">
-        <div class="bigbang" style="width:100%;height:100%;">
-          <div class="gravity-spot ok-inst-face" style="--o-force:${force}px;${centering}">
+      <div class="ok-inst-case ok-inst-case--${cfg.caseShape}" style="width:${e(cfg.size)};aspect-ratio:1;container-type:inline-size;">
+        <div class="bigbang" style="width:100%;height:100cqw;">
+          <div class="gravity-spot ok-inst-face" style="--o-force:${force};font-size:${dial * .072}cqw;${centering}">
             ${face}
             ${minorTicks}${majorTicks}
             ${zones}
@@ -253,6 +250,9 @@ export class OrbitInstrument extends OrbitKitElement {
 
     this._needle = this.querySelector('.ok-inst-needle');
     this._value = this.querySelector('.ok-inst-value');
+    this._unit = this.querySelector('.ok-inst-unit');
+    this._caption = this.querySelector('.ok-inst-cap-label');
+    this._readout = this.querySelector('.ok-inst-readout');
   }
 
   sync(cfg) {
@@ -263,6 +263,10 @@ export class OrbitInstrument extends OrbitKitElement {
     const deg = (((cfg.from + 270 + frac * cfg.range) % 360) + 360) % 360;
     if (this._needle) this._needle.style.setProperty('--o-angle-composite', `${deg.toFixed(2)}deg`);
     if (this._value) this._value.textContent = this._fmtValue(cfg.value, cfg.span);
+    if (this._unit) { this._unit.textContent = cfg.unit; this._unit.hidden = !cfg.unit; }
+    if (this._caption) { this._caption.textContent = cfg.label; this._caption.hidden = !cfg.label; }
+    if (this._readout) this._readout.hidden = !cfg.digital && !cfg.label && !cfg.unit;
+    this._describe(`${cfg.label ? cfg.label + ': ' : ''}${this._fmtValue(cfg.value, cfg.span)}${cfg.unit}; range ${cfg.min} to ${cfg.max}`);
   }
 
   /** Tick-scale label: integers bare, otherwise one decimal. */
