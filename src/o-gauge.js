@@ -1,54 +1,69 @@
-import { OrbitKitElement, define, escapeHTML as e } from './base.js';
+import { OrbitKitElement, define, injectStyleOnce, universe, hub, fixed, escapeHTML as e, withShared, RANGE_ATTRS, FORMAT_ATTRS } from './base.js';
 
-/** A single-value radial gauge. Value/label updates retain the existing arc. */
+/**
+ * <o-gauge>: one value on an arc, with a readout in the middle.
+ *
+ *   .bigbang (width = size)
+ *   └── .gravity-spot
+ *       ├── .orbit-12 > o-arc.inner-orbit     track (thickness lanes, flush with the edge)
+ *       ├── .orbit-12 > o-arc.inner-orbit     value
+ *       └── .orbit-0  > .satellite.at-center  readout
+ *
+ * Value and label updates patch the existing arc; nothing is rebuilt.
+ */
 export class OrbitGauge extends OrbitKitElement {
   static get observedAttributes() {
-    return ['value', 'max', 'range', 'from', 'orbit', 'size', 'label', 'unit', 'fill', 'track', 'stroke-width', 'shape', 'glow'];
+    return withShared(['value', 'range', 'from', 'orbit', 'thickness', 'size', 'label', 'fill', 'track', 'stroke-width', 'shape', 'glow'], RANGE_ATTRS, FORMAT_ATTRS);
   }
 
   readConfig() {
     const range = Math.max(0, Math.min(360, this._num('range', 270)));
-    const max = this._num('max', 100);
+    const { value, min, max, step, fraction } = this._range({ min: 0, max: 100, step: 0 });
     return {
-      value: this._num('value', 0), max: max > 0 ? max : 100, range,
+      value, min, max, step, fraction, range,
       from: this.hasAttribute('from') ? this._num('from', 0) : this._autoFrom(range),
-      orbit: Math.max(1, Math.round(this._num('orbit', 4))), size: this._size('size', '200px'),
-      fill: this._color('fill', '#6366f1'), track: this._color('track', '#262d38'),
-      strokeWidth: Math.max(0, this._num('stroke-width', 8)), shape: this._str('shape', 'rounded'),
-      unit: this._str('unit', ''), label: this.getAttribute('label'), glow: this.getAttribute('glow')
+      thickness: this._thickness(2.4), size: this._size('size', '200px'),
+      fill: this._color('fill', null), track: this._color('track', null),
+      strokeWidth: Math.max(0, this._num('stroke-width', 0)), shape: this._str('shape', 'rounded'),
+      unit: this._unitText(), label: this.getAttribute('label'), glow: this.hasAttribute('glow') ? this._glowPx() : null
     };
   }
 
-  structuralSignature({ value, max, label, unit, ...structure }) { return JSON.stringify(structure); }
-  // Retain the original public helper names for existing integrations.
+  structuralSignature({ value, fraction, min, max, step, label, unit, fill, track, ...structure }) { return JSON.stringify(structure); }
+  // The 0.x helper names keep working.
   _readConfig() { return this.readConfig(); }
   render() { this._render(); }
 
   build(cfg) {
-    const ring = `--o-range:${cfg.range}deg;--o-from:${cfg.from}deg;`;
-    const track = `--o-fill:${cfg.track};--o-stroke:${cfg.track};--o-stroke-width:${cfg.strokeWidth}`;
-    const fill = `--o-fill:${cfg.fill};--o-stroke:${cfg.fill};--o-stroke-width:${cfg.strokeWidth};${this._glow(cfg.fill)}`;
-    this.innerHTML = `
-      <div class="bigbang" style="width:${e(cfg.size)};aspect-ratio:1;height:auto;container-type:inline-size;">
-        <div class="gravity-spot" style="--o-force:calc(100cqw * 12 / ${cfg.orbit + 1});">
-          <div class="orbit-${cfg.orbit}" style="${ring}"><o-arc value="100" shape="${e(cfg.shape)}" style="${e(track)}"></o-arc></div>
-          <div class="orbit-${cfg.orbit}" style="${ring}"><o-arc class="o-gauge-fill" value="0" shape="${e(cfg.shape)}" style="${e(fill)}"></o-arc></div>
-          <div class="orbit-0"><div class="satellite at-center"><div class="capsule ok-hub"></div></div></div>
-        </div>
-      </div>`;
+    const ring = `--o-range:${cfg.range}deg;--o-from:${cfg.from}deg;--o-size-ratio:${fixed(cfg.thickness)};--o-gap:0`;
+    // stroke-width (0.x): an outline in the band's own color, in px.
+    const stroke = cfg.strokeWidth ? `--o-stroke-width:${cfg.strokeWidth};` : '';
+    const glow = cfg.glow == null ? '' : `filter:drop-shadow(0 0 ${cfg.glow}px var(--ok-fill, #6366f1));`;
+    this.innerHTML = universe(cfg.size, `
+      <div class="orbit-12" style="${ring}"><o-arc class="inner-orbit ok-track" value="100" shape="${e(cfg.shape)}"${stroke ? ` style="${stroke}"` : ''}></o-arc></div>
+      <div class="orbit-12" style="${ring}"><o-arc class="inner-orbit ok-value o-gauge-fill" value="0" shape="${e(cfg.shape)}" ${stroke || glow ? ` style="${stroke}${glow}"` : ''}></o-arc></div>
+      ${hub(2 * (12 - cfg.thickness) - 1)}`);
     this._fill = this.querySelector('.o-gauge-fill');
-    this._center = this.querySelector('.capsule');
+    this._center = this.querySelector('.ok-hub');
   }
 
   sync(cfg) {
-    const value = Math.max(0, Math.min(cfg.max, cfg.value));
-    const pct = value / cfg.max * 100;
-    const text = cfg.label ?? `${cfg.value}${cfg.unit}`;
-    this._fill?.setAttribute('value', pct.toFixed(2));
+    this._applyTheme({ '--ok-fill': cfg.fill, '--ok-track': cfg.track });
+    const range = { min: cfg.min, max: cfg.max };
+    const reading = this._formatText(cfg.value, range);
+    const text = cfg.label ?? reading;
+    this._fill?.setAttribute('value', (cfg.fraction * 100).toFixed(2));
     if (this._center) this._center.textContent = text;
-    this._describe(`${text}; ${value} of ${cfg.max}${cfg.unit}`);
+    this._describe(`${text}; ${this._format(cfg.value, range)} of ${this._formatText(cfg.max, range)}`, 'meter');
+    this._ariaRange(cfg);
   }
   _build(cfg) { this.build(cfg); }
   _sync(cfg) { this.sync(cfg); }
 }
+
+const GAUGE_CSS = `
+o-gauge .ok-track { --o-fill: var(--ok-track, #262d38); --o-stroke: var(--o-fill); }
+o-gauge .ok-value { --o-fill: var(--ok-fill, #6366f1); --o-stroke: var(--o-fill); transition: filter .2s; }
+`;
+injectStyleOnce('orbit-kit-gauge', GAUGE_CSS);
 define('o-gauge', OrbitGauge);

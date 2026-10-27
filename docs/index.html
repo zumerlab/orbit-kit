@@ -3,16 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>orbit-kit — component gallery</title>
+  <title>Orbit Kit gallery</title>
 
   <!-- Orbit core: CSS engine + base components (registers <o-progress>, <o-arc>).
        For production use the CDN:
-         https://unpkg.com/@zumer/orbit@latest/dist/orbit.css|.js -->
-  <link rel="stylesheet" href="https://unpkg.com/@zumer/orbit@latest/dist/orbit.css">
-  <script src="https://unpkg.com/@zumer/orbit@latest/dist/orbit.js"></script>
+         https://unpkg.com/@zumer/orbit@2.0.0/dist/orbit.min.css|.js -->
+  <link rel="stylesheet" href="https://unpkg.com/@zumer/orbit@2.0.0/dist/orbit.min.css">
+  <script src="https://unpkg.com/@zumer/orbit@2.0.0/dist/orbit.min.js"></script>
 
   <!-- orbit-kit: registers every high-level component -->
-  <script type="module" src="https://unpkg.com/@zumer/orbit-kit@latest/src/orbit-kit.js"></script>
+  <script type="module" src="https://unpkg.com/@zumer/orbit-kit@2.0.0/src/orbit-kit.js"></script>
 
   <style>
     body { font-family: system-ui, sans-serif; margin: 0; padding: 2rem; background: #060f16; color: #d8eefe; }
@@ -34,7 +34,7 @@
   </style>
 </head>
 <body>
-  <h1>orbit-kit — component gallery</h1>
+  <h1>Orbit Kit gallery</h1>
   <p class="built-on">
     <span>🛰️ Built on <strong><a href="https://github.com/zumerlab/orbit">Orbit</a></strong> — the CSS + JavaScript system for radial UIs.</span>
     <a href="https://zumerlab.github.io/orbit-docs">Orbit docs&nbsp;↗</a>
@@ -47,7 +47,7 @@
     <a href="https://github.com/zumerlab/orbit">Orbit core</a> (CSS + JS) loaded on the page.
   </p>
 
-  <h2>&lt;o-gauge&gt; — single value</h2>
+  <h2>&lt;o-gauge&gt;</h2>
   <div class="grid">
     <div class="cell">
       <o-gauge value="72" unit="%"></o-gauge>
@@ -59,7 +59,7 @@
     </div>
   </div>
 
-  <h2>&lt;o-donut&gt; — data-driven chart</h2>
+  <h2>&lt;o-donut&gt;</h2>
   <div class="grid">
     <div class="cell">
       <o-donut label="$2.4k" size="200px"
@@ -75,7 +75,7 @@
     </div>
   </div>
 
-  <h2>&lt;o-rings&gt; — activity rings</h2>
+  <h2>&lt;o-rings&gt;</h2>
   <div class="grid">
     <div class="cell">
       <o-rings size="200px"
@@ -88,7 +88,7 @@
 
 <!-- o-meter is superseded by o-instrument (preset="speedometer") — see below. -->
 
-  <h2>&lt;o-knob&gt; — interactive control</h2>
+  <h2>&lt;o-knob&gt;</h2>
   <div class="grid">
     <div class="cell">
       <o-knob id="vol" value="65" unit="%" fill="#3da9fc"></o-knob>
@@ -96,7 +96,7 @@
     </div>
   </div>
 
-  <h2>&lt;o-menu&gt; — radial menu (single- &amp; multi-level)</h2>
+  <h2>&lt;o-menu&gt;</h2>
   <div class="grid">
     <div class="cell">
       <o-menu id="menu" label="MENU" range="270"
@@ -151,7 +151,7 @@
   </div>
   <div id="log">— pick a menu item —</div>
 
-  <h2>&lt;o-compass&gt; — heading</h2>
+  <h2>&lt;o-compass&gt;</h2>
   <div class="grid">
     <div class="cell">
       <o-compass id="compass" heading="45"></o-compass>
@@ -159,7 +159,7 @@
     </div>
   </div>
 
-  <h2>&lt;o-instrument&gt; — cockpit / dashboard gauges</h2>
+  <h2>&lt;o-instrument&gt;</h2>
   <p class="lead">Preset cockpit instruments — automotive, aviation, computer — with major/minor ticks, color zones, redline, numeric scale and a digital readout.</p>
   <div class="grid">
     <div class="cell">
@@ -196,14 +196,14 @@
     </div>
   </div>
 
-  <h2>&lt;o-clock&gt; — analog clock / watch face (flagship)</h2>
+  <h2>&lt;o-clock&gt;</h2>
   <div class="grid">
     <div class="cell">
       <o-clock live seconds size="200px"></o-clock>
       <small><code>live seconds</code> — ticking, round</small>
     </div>
     <div class="cell">
-      <o-clock preset="smartwatch" live brand="ORBIT" size="200px"></o-clock>
+      <o-clock preset="smartwatch" live brand="Orbit" size="200px"></o-clock>
       <small><code>preset="smartwatch"</code> — rounded case, digital + date</small>
     </div>
     <div class="cell">
@@ -211,7 +211,7 @@
       <small><code>preset="chrono"</code> — tri-compax sub-dials (live)</small>
     </div>
     <div class="cell">
-      <o-clock case="rectangle" dial="oval" live smooth glow accent="#3da9fc" brand="ORBIT" digital size="200px"></o-clock>
+      <o-clock case="rectangle" dial="oval" live smooth glow accent="#3da9fc" brand="Orbit" digital size="200px"></o-clock>
       <small><code>case="rectangle" dial="oval"</code> — tonneau (vertical)</small>
     </div>
     <div class="cell">
@@ -229,14 +229,38 @@
     </div>
   </div>
 
-  <h2>&lt;o-radar&gt; — scope</h2>
+  <h2>&lt;o-radar&gt;</h2>
   <div class="grid">
     <div class="cell">
-      <o-radar rings="4" spokes="12" color="#3da9fc" label="SCAN" size="260px" sweep-width="140"
+      <o-radar rings="4" spokes="12" color="#3da9fc" label="Scan" size="260px" sweep-width="140"
         targets='[{"angle":60,"dist":0.8},
                   {"angle":200,"dist":0.45},
                   {"angle":310,"dist":0.65,"color":"#ef4565"}]'></o-radar>
       <small>orbit grid + cross-hairs + <code>sweep-width="140"</code> gradient trail + glowing blips</small>
+    </div>
+  </div>
+
+  <h2>&lt;o-timer&gt;</h2>
+  <div class="grid">
+    <div class="cell">
+      <o-timer duration="1:30" label="Tea"></o-timer>
+      <small><code>duration="1:30"</code></small>
+    </div>
+    <div class="cell">
+      <o-timer duration="20" warn="5" ticks="60" fill="#2dd4bf"></o-timer>
+      <small><code>warn="5" ticks="60"</code></small>
+    </div>
+  </div>
+
+  <h2>&lt;o-status&gt;</h2>
+  <div class="grid">
+    <div class="cell">
+      <o-status label="Services" labels data='[{"label":"API","status":"ok"},{"label":"Web","status":"ok"},{"label":"DB","status":"warn"},{"label":"Queue","status":"error"},{"label":"CDN","status":"ok"}]'></o-status>
+      <small><code>labels</code></small>
+    </div>
+    <div class="cell">
+      <o-status label="Regions" labels pulse size="260px" data='[{"label":"EU","children":[{"label":"api","status":"ok"},{"label":"web","status":"ok"}]},{"label":"US","children":[{"label":"api","status":"ok"},{"label":"web","status":"down"},{"label":"db","status":"degraded"}]}]'></o-status>
+      <small>Groups with <code>children</code></small>
     </div>
   </div>
 

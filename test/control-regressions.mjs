@@ -29,7 +29,7 @@ const knob=make(OrbitKnob,{min:0,max:10,step:6,value:6});
 knob.value=10;
 assert.equal(knob.value,10);
 assert.equal(knob.getAttribute('aria-valuenow'),'10');
-assert.equal(knob.events.at(-1).detail.value,10);
+assert.equal(knob.events.length,0,'Setting value from code fires no event, like a native input');
 knob.setAttribute('min','1'); knob.setAttribute('step','2'); knob.value=1;
 assert.equal(knob.value,1);
 knob.value=4; assert.equal(knob.value,5);
@@ -49,7 +49,7 @@ knob.value=4; assert.equal(knob.value,4,'Programmatic updates remain possible wh
 knob.removeAttribute('disabled');
 assert.equal(knob.tabIndex,0);
 assert.equal(knob._box.style.opacity,'');
-knob.setAttribute('fill','red;position:fixed'); assert.equal(knob.readConfig().fill,'#a1a1aa');
+knob.setAttribute('fill','red;position:fixed'); assert.equal(knob.readConfig().fill,null); assert.equal(knob.style.getPropertyValue('--ok-fill'),'');
 knob.setAttribute('max','-10'); assert.equal(knob.value,1);
 assert.equal(knob.getAttribute('aria-valuemin'),knob.getAttribute('aria-valuemax'));
 

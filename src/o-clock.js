@@ -1,11 +1,11 @@
 /**
- * <o-clock> — analog clock / watch face. The kit's flagship.
+ * <o-clock>: an analog clock or watch face.
  *
- * The idiomatic Orbit clock: every part is a plain element on a nested orbit,
- * and the rotation math is the framework's job. Hands are `.vector`s at the
- * center orbit, pointed by `--o-angle-composite`; ticks are vectors
- * auto-distributed around a ring; numerals are satellites on an outer ring;
- * sub-dials are nested gravity-spots with their own hands.
+ * Every part is a plain Orbit element and the rotation math is Orbit's job.
+ * The dial is the universe (orbit-12 is its edge). Hands are `.vector`s on the
+ * center orbit, pointed by `--o-angle-composite`; ticks are vectors spread
+ * around orbit-11; numerals are satellites on orbit-9; sub-dials are
+ * satellites that hold a universe of their own, with their own hands.
  *
  * Variants:
  *   - case:    round | square | rounded | rectangle   (the body/bezel)
@@ -17,53 +17,57 @@
  *   - presets: classic | roman | minimal | chrono | smartwatch
  *
  *   <o-clock live seconds></o-clock>
- *   <o-clock preset="chrono" live brand="ORBIT"></o-clock>
+ *   <o-clock preset="chrono" live brand="Orbit"></o-clock>
  *   <o-clock case="rectangle" dial="oval" live smooth></o-clock>   <!-- tonneau -->
  *
  * Hands/readouts are patched in place every frame/second; the structure is
  * rebuilt only when the face itself changes.
  */
-import { OrbitKitElement, define, injectStyleOnce, escapeHTML as e } from './base.js';
+import { OrbitKitElement, define, injectStyleOnce, universe, hub, escapeHTML as e } from './base.js';
 
 const CLOCK_CSS = `
+o-clock { --ok-font-size: 7.5cqmin; }
 o-clock .ok-clock-case {
   box-sizing: border-box; display: flex; align-items: center; justify-content: center;
 }
+o-clock .ok-clock-case > .bigbang { width: 100%; }
 o-clock .ok-clock-case--round     { border-radius: 50%; }
-o-clock .ok-clock-case--square    { border-radius: 9%; }
-o-clock .ok-clock-case--rounded   { border-radius: 26%; }
-o-clock .ok-clock-case--rectangle { border-radius: 24%; }
+o-clock .ok-clock-case--square    { border-radius: 9%; padding: 8%; }
+o-clock .ok-clock-case--rounded   { border-radius: 26%; padding: 8%; }
+o-clock .ok-clock-case--rectangle { border-radius: 24%; padding: 8%; }
+o-clock .ok-clock-case--rectangle > .bigbang { height: 100%; aspect-ratio: auto; }
 o-clock .ok-clock-case--square,
 o-clock .ok-clock-case--rounded,
 o-clock .ok-clock-case--rectangle {
-  background: var(--ok-clock-case-bg, linear-gradient(160deg, #232a34, #11151b));
+  background: var(--ok-clock-case-bg, var(--ok-case, linear-gradient(160deg, #232a34, #11151b)));
   box-shadow: 0 10px 30px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.06);
 }
-o-clock .ok-clock-face { color: var(--ok-clock-numeral, #e6edf3); }
+o-clock .ok-clock-face { color: var(--ok-clock-numeral, var(--ok-text, #e6edf3)); }
 o-clock .ok-clock-dial {
-  background: var(--ok-clock-face, radial-gradient(circle at 50% 35%, #1b212b, #0c0f14));
-  box-shadow: inset 0 0 0 4px var(--ok-clock-bezel, #2a3340), inset 0 4px 18px rgba(0,0,0,.6);
+  background: var(--ok-clock-face, var(--ok-face, radial-gradient(circle at 50% 35%, #1b212b, #0c0f14)));
+  box-shadow: inset 0 0 0 4px var(--ok-clock-bezel, var(--ok-bezel, #2a3340)), inset 0 4px 18px rgba(0,0,0,.6);
 }
-o-clock .ok-clock-tick   { background: var(--ok-clock-tick, rgba(230,237,243,.35)); height: 2px; border-radius: 2px; }
-o-clock .ok-clock-tick-h { background: var(--ok-clock-tick-h, #e6edf3); height: 3px; border-radius: 2px; }
+o-clock .ok-clock-tick   { background: var(--ok-clock-tick, var(--ok-tick, rgba(230,237,243,.35))); height: max(1px, .6cqmin); border-radius: 2px; }
+o-clock .ok-clock-tick-h { background: var(--ok-clock-tick-h, var(--ok-hand, #e6edf3)); height: max(2px, 1cqmin); border-radius: 2px; }
 o-clock .ok-clock-num    { font-weight: 700; font-variant-numeric: tabular-nums; }
-o-clock .ok-clock-brand   { font-size: .62em; letter-spacing: .18em; font-weight: 800; text-transform: uppercase; color: var(--ok-clock-accent, #ef4565); }
-o-clock .ok-clock-digital { font-size: .7em; font-weight: 700; letter-spacing: .04em; font-variant-numeric: tabular-nums; opacity: .85; }
-o-clock .ok-clock-date    { font-size: .62em; font-weight: 800; font-variant-numeric: tabular-nums; padding: .12em .4em; border-radius: 4px; background: rgba(255,255,255,.1); }
-o-clock .ok-clock-hour   { background: var(--ok-clock-hand, #e6edf3); height: 7px; border-radius: 4px; }
-o-clock .ok-clock-min    { background: var(--ok-clock-hand, #e6edf3); height: 5px; border-radius: 3px; }
-o-clock .ok-clock-sec    { background: var(--ok-clock-accent, #ef4565); height: 2px; border-radius: 2px; }
-o-clock .ok-clock-cap    { background: var(--ok-clock-accent, #ef4565); box-shadow: 0 0 0 3px var(--ok-clock-face-cap, #0c0f14); }
-o-clock .ok-clock-ringtime { font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: .02em; color: var(--ok-clock-numeral, #e6edf3); text-align: center; }
+o-clock .ok-clock-brand   { font-size: .6em; font-weight: 800; white-space: nowrap; color: var(--ok-clock-accent, var(--ok-accent, #ef4565)); }
+o-clock .ok-clock-digital { font-size: .7em; font-weight: 700; font-variant-numeric: tabular-nums; opacity: .85; }
+o-clock .ok-clock-date    { font-size: .62em; font-weight: 800; font-variant-numeric: tabular-nums; padding: .12em .4em; border-radius: 4px; background: color-mix(in srgb, currentColor 12%, transparent); }
+o-clock .ok-clock-hour   { background: var(--ok-clock-hand, var(--ok-hand, #e6edf3)); height: max(3px, 2.4cqmin); border-radius: 9px; }
+o-clock .ok-clock-min    { background: var(--ok-clock-hand, var(--ok-hand, #e6edf3)); height: max(2px, 1.7cqmin); border-radius: 9px; }
+o-clock .ok-clock-sec    { background: var(--ok-clock-accent, var(--ok-accent, #ef4565)); height: max(1px, .7cqmin); border-radius: 2px; }
+o-clock .ok-clock-cap    { background: var(--ok-clock-accent, var(--ok-accent, #ef4565)); box-shadow: 0 0 0 max(2px, .8cqmin) var(--ok-clock-face-cap, var(--ok-surface, #0c0f14)); }
+o-clock .ok-clock-ringtime { font-weight: 800; font-variant-numeric: tabular-nums; color: var(--ok-clock-numeral, var(--ok-text, #e6edf3)); text-align: center; --ok-hub-size: 1.1em; }
 /* sub-dials */
 o-clock .ok-subdial-ring { border: 1px solid var(--ok-clock-tick, rgba(230,237,243,.3)); box-shadow: inset 0 0 8px rgba(0,0,0,.4); }
 o-clock .ok-sub-tick     { background: var(--ok-clock-tick, rgba(230,237,243,.3)); height: 1px; }
-o-clock .ok-subdial-hand { background: var(--ok-clock-accent, #ef4565); height: 2px; border-radius: 2px; }
-o-clock .ok-subdial-cap  { background: var(--ok-clock-tick-h, #e6edf3); }
-o-clock .ok-subdial-label{ font-size: .4em; opacity: .55; letter-spacing: .1em; text-transform: uppercase; }
+o-clock .ok-subdial-hand { background: var(--ok-clock-accent, var(--ok-accent, #ef4565)); height: max(1px, .6cqmin); border-radius: 2px; }
+o-clock .ok-subdial-cap  { background: var(--ok-clock-tick-h, var(--ok-hand, #e6edf3)); }
+o-clock .ok-subdial-label{ font-size: .4em; opacity: .6; }
 o-clock.ok-glow .ok-clock-hour,
-o-clock.ok-glow .ok-clock-min  { filter: drop-shadow(0 0 var(--ok-clock-glow, 4px) var(--ok-clock-hand, #e6edf3)); }
-o-clock.ok-glow .ok-clock-sec  { filter: drop-shadow(0 0 var(--ok-clock-glow, 5px) var(--ok-clock-accent, #ef4565)); }
+o-clock.ok-glow .ok-clock-min  { filter: drop-shadow(0 0 var(--ok-clock-glow, 4px) var(--ok-clock-hand, var(--ok-hand, #e6edf3))); }
+o-clock.ok-glow .ok-clock-sec  { filter: drop-shadow(0 0 var(--ok-clock-glow, 5px) var(--ok-clock-accent, var(--ok-accent, #ef4565))); }
+o-clock .ok-ring-track, o-clock .ok-ring-value { --o-stroke: var(--o-fill); }
 `;
 
 const ROMAN = ['XII', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI'];
@@ -74,7 +78,7 @@ const PRESETS = {
   classic:    { case: 'round',   numerals: 'arabic' },
   roman:      { case: 'round',   numerals: 'roman' },
   minimal:    { case: 'round',   numerals: 'none' },
-  chrono:     { case: 'round',   numerals: 'arabic', subdials: true, brand: 'ORBIT' },
+  chrono:     { case: 'round',   numerals: 'arabic', subdials: true, brand: 'Orbit' },
   smartwatch: { case: 'rounded', numerals: 'arabic', seconds: true, smooth: true,
                 digital: true, date: true, accent: '#3da9fc' }
 };
@@ -149,27 +153,22 @@ export class OrbitClock extends OrbitKitElement {
 
     if (cfg.ringsFace) { this._buildRingsFace(cfg); return; }
 
-    // Orbit sizes track --o-force (orbit-N diameter = N/12 * force), NOT the
-    // box. The dial is orbit-11, so scale force to make it equal the requested
-    // size. The case wraps the dial with extra frame for non-round shapes.
-    // Query units resolve relative to the requested CSS width (including rem/%/calc).
-    const frame = cfg.caseShape === 'round' ? 0 : 8;
-    const dial = 100 - frame * 2;
+    // The case is a box around the dial; the dial is the universe. A
+    // rectangle case gives a tall universe whose shorter side is its width.
     const caseH = cfg.caseShape === 'rectangle' ? 126 : 100;
-    const force = `calc(${dial}cqw * 12 / 11)`;
     const ellipse = cfg.oval ? `--o-ellipse-x:1;--o-ellipse-y:${cfg.caseShape === 'rectangle' ? (100 / caseH).toFixed(3) : '.82'};` : '';
 
     // --- ticks: 60 minute, 12 hour (overdraw every 5th) ---
     const minuteTicks = Array.from({ length: 60 }, () =>
-      '<div class="vector inner-orbit shrink-55 ok-clock-tick"></div>').join('');
+      '<div class="vector inner-orbit ok-clock-tick"></div>').join('');
     const hourTicks = Array.from({ length: 12 }, () =>
-      '<div class="vector inner-orbit shrink-15 ok-clock-tick-h"></div>').join('');
+      '<div class="vector inner-orbit ok-clock-tick-h"></div>').join('');
 
     // --- numerals ---
     const labels = cfg.numerals === 'roman' ? ROMAN
                  : cfg.numerals === 'none' ? null : ARABIC;
     const numerals = labels
-      ? `<div class="orbit-8">${labels.map((n) =>
+      ? `<div class="orbit-${cfg.numerals === 'roman' ? 8 : 9}">${labels.map((n) =>
           `<div class="satellite"><div class="capsule ok-clock-num">${n}</div></div>`).join('')}</div>`
       : '';
 
@@ -185,32 +184,31 @@ export class OrbitClock extends OrbitKitElement {
       : '';
 
     // --- sub-dials: chronograph tri-compax at 3/6/9 ---
-    const subForce = `calc(${dial}cqw * .96)`;
     const subdials = cfg.subdials
-      ? this._subdial('sec', 'angle-270', subForce, 'S')   // 9 o'clock — small seconds
-      + this._subdial('h24', 'angle-90', subForce, '24')   // 3 o'clock — 24-hour
-      + this._subdial('date', 'angle-180', subForce, '31') // 6 o'clock — date
+      ? this._subdial('sec', 'angle-270', 'S')   // 9 o'clock: small seconds
+      + this._subdial('h24', 'angle-90', '24')   // 3 o'clock: 24-hour
+      + this._subdial('date', 'angle-180', '31') // 6 o'clock: date
       : '';
 
-    // --- hands ---
+    // --- hands (length in lanes; outer-orbit starts them at the center) ---
     const secondHand = cfg.seconds
-      ? '<div class="vector outer-orbit grow-4x ok-clock-hand ok-clock-sec"></div>'
+      ? '<div class="vector outer-orbit ok-clock-hand ok-clock-sec" style="--o-size-ratio:10"></div>'
       : '';
 
     this.innerHTML = `
-      <div class="ok-clock-case ok-clock-case--${cfg.caseShape}" style="width:${e(cfg.size)};aspect-ratio:100 / ${caseH};container-type:inline-size;">
-        <div class="bigbang" style="width:100%;height:${caseH}cqw;">
-          <div class="gravity-spot ok-clock-face" style="--o-force:${force};font-size:${dial * .075}cqw;${ellipse}">
-            <div class="orbit-11 ok-clock-dial"></div>
-            <div class="orbit-10">${minuteTicks}</div>
-            <div class="orbit-10">${hourTicks}</div>
+      <div class="ok-clock-case ok-clock-case--${cfg.caseShape}${cfg.caseShape === 'round' ? '' : ' ok-surface'}" style="width:${e(cfg.size)};aspect-ratio:100 / ${caseH}">
+        <div class="bigbang">
+          <div class="gravity-spot ok-clock-face"${ellipse ? ` style="${ellipse}"` : ''}>
+            <div class="orbit-12 ok-clock-dial ok-surface"></div>
+            <div class="orbit-11" style="--o-size-ratio:.45">${minuteTicks}</div>
+            <div class="orbit-11" style="--o-size-ratio:.9">${hourTicks}</div>
             ${numerals}
             ${brand}${digital}${date}${subdials}
             <div class="orbit-0">
-              <div class="vector outer-orbit grow-2x ok-clock-hand ok-clock-hour"></div>
-              <div class="vector outer-orbit grow-3x ok-clock-hand ok-clock-min"></div>
+              <div class="vector outer-orbit ok-clock-hand ok-clock-hour" style="--o-size-ratio:5.4"></div>
+              <div class="vector outer-orbit ok-clock-hand ok-clock-min" style="--o-size-ratio:8.2"></div>
               ${secondHand}
-              <div class="satellite at-center shrink-80 ok-clock-cap"></div>
+              <div class="satellite at-center ok-clock-cap" style="--o-size-ratio:.9"></div>
             </div>
           </div>
         </div>
@@ -227,22 +225,22 @@ export class OrbitClock extends OrbitKitElement {
   }
 
   /**
-   * One chronograph sub-dial: a nested gravity-spot (its own --o-force keeps it
-   * small) with a tick ring, a labeled counter and a single live hand.
+   * One chronograph sub-dial: a satellite that is a universe of its own, with
+   * a tick ring, a labeled counter and a single live hand.
    */
-  _subdial(kind, angleClass, subForce, label) {
+  _subdial(kind, angleClass, label) {
     const ticks = Array.from({ length: 12 }, () =>
-      '<div class="vector inner-orbit shrink-60 ok-sub-tick"></div>').join('');
+      '<div class="vector inner-orbit ok-sub-tick"></div>').join('');
     return `
-      <div class="orbit-5">
+      <div class="orbit-5" style="--o-size-ratio:5.8">
         <div class="satellite ${angleClass}">
-          <div class="gravity-spot" style="--o-force:${subForce};">
-            <div class="orbit-3 ok-subdial-ring"></div>
-            <div class="orbit-3">${ticks}</div>
-            <div class="orbit-1"><div class="satellite angle-180"><div class="capsule ok-subdial-label">${label}</div></div></div>
+          <div class="gravity-spot">
+            <div class="orbit-12 ok-subdial-ring"></div>
+            <div class="orbit-12" style="--o-size-ratio:1.6">${ticks}</div>
+            <div class="orbit-5"><div class="satellite angle-180"><div class="capsule ok-subdial-label">${label}</div></div></div>
             <div class="orbit-0">
-              <div class="vector outer-orbit grow-1x ok-subdial-hand ok-sub-${kind}"></div>
-              <div class="satellite at-center shrink-90 ok-subdial-cap"></div>
+              <div class="vector outer-orbit ok-subdial-hand ok-sub-${kind}" style="--o-size-ratio:8.5"></div>
+              <div class="satellite at-center ok-subdial-cap" style="--o-size-ratio:1.4"></div>
             </div>
           </div>
         </div>
@@ -261,29 +259,17 @@ export class OrbitClock extends OrbitKitElement {
     ];
     if (cfg.seconds) defs.push({ key: 'S', color: this._color('second-color', this._color('accent', '#0a84ff')) });
 
-    const outer = 1 + defs.length;
-    const force = `calc(100cqw * 12 / ${outer + 1})`;
-    const sw = 12;
-
+    const thickness = 2.6;
     const rings = defs.map((r, i) => {
-      const orbit = outer - i;
-      const track = `color-mix(in srgb, ${r.color} 14%, #0c0f14)`;
+      const ring = `class="orbit-${12 - i * 3}" style="--o-size-ratio:${thickness};--o-gap:0"`;
+      const track = `color-mix(in srgb, ${r.color} 18%, transparent)`;
       const glow = cfg.glow != null ? `filter:drop-shadow(0 0 ${Math.max(0, this._num('glow', 5))}px ${r.color});` : '';
-      const fill = `--o-fill:${r.color};--o-stroke:${r.color};--o-stroke-width:${sw};${glow}`;
-      // Solid track o-arc behind + o-progress value (o-progress back is hollow).
-      return `<div class="orbit-${orbit}"><o-arc value="100" shape="rounded" style="--o-fill:${track};--o-stroke:${track};--o-stroke-width:${sw}"></o-arc></div>`
-        + `<div class="orbit-${orbit}"><o-progress class="ok-ring-${r.key}" value="0" max="100" shape="rounded" style="${e(fill)}"></o-progress></div>`;
+      // Solid track arc behind the progress value.
+      return `<div ${ring}><o-arc class="inner-orbit ok-ring-track" value="100" shape="rounded" style="--o-fill:${track}"></o-arc></div>`
+        + `<div ${ring}><o-progress class="inner-orbit ok-ring-value ok-ring-${r.key}" value="0" max="100" shape="rounded" style="${e(`--o-fill:${r.color};${glow}`)}"></o-progress></div>`;
     }).join('');
-
-    this.innerHTML = `
-      <div class="bigbang" style="width:${e(cfg.size)};aspect-ratio:1;height:auto;container-type:inline-size;">
-        <div class="gravity-spot" style="--o-force:${force};">
-          ${rings}
-          <div class="orbit-0"><div class="satellite at-center">
-            <div class="capsule ok-clock-ringtime" style="font-size:13cqw;"></div>
-          </div></div>
-        </div>
-      </div>`;
+    const hole = 12 - (defs.length - 1) * 3 - thickness;
+    this.innerHTML = universe(cfg.size, `${rings}${hub(2 * hole - .5, '', 'ok-hub ok-clock-ringtime')}`);
 
     this._ringH = this.querySelector('.ok-ring-H');
     this._ringM = this.querySelector('.ok-ring-M');

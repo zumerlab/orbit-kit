@@ -7,7 +7,8 @@ import { fileURLToPath } from 'node:url';
 import { chromium, firefox, webkit } from 'playwright';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const orbit = path.resolve(process.env.ORBIT_DIR || path.join(root, 'node_modules/@zumer/orbit'));
+// Orbit 2: ORBIT_DIR, else a sibling ../orbit checkout, else the installed peer.
+const orbit = path.resolve(process.env.ORBIT_DIR || (existsSync(path.join(root, '../orbit/dist/orbit.js')) ? path.join(root, '../orbit') : path.join(root, 'node_modules/@zumer/orbit')));
 for (const file of ['orbit.js', 'orbit.css']) assert.ok(existsSync(path.join(orbit, 'dist', file)), `Missing ${orbit}/dist/${file}; build Orbit first or set ORBIT_DIR.`);
 const server = http.createServer((request, response) => {
   let pathname;
@@ -47,8 +48,11 @@ try {
       const page = await browser.newPage({ viewport: { width: 1200, height: 900 }, reducedMotion: 'reduce' });
       const errors = [];
       page.on('pageerror', error => errors.push(error.message));
+      // Orbit explains misuse with [orbit] console messages; the kit must cause none.
+      page.on('console', message => { if (message.type() === 'error' || message.text().includes('[orbit]')) errors.push(`${message.type()}: ${message.text()}`); });
       await page.goto(`http://127.0.0.1:${server.address().port}/`);
-      await page.evaluate(() => Promise.all(['o-arc','o-progress','o-menu','o-knob','o-gauge'].map(tag => customElements.whenDefined(tag))));
+      await page.evaluate(() => Promise.all(['o-arc','o-progress','o-menu','o-knob','o-gauge','o-timer','o-status'].map(tag => customElements.whenDefined(tag))));
+      assert.match(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--o-gray-light') + (window.Orbit?.ready ? ' v2' : '')), /v2/, 'Orbit 2 runtime (Orbit.ready) is required');
       const mount = async html => { await page.locator('#fixtures').evaluate((node, value) => { node.innerHTML = value; }, html); await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))); };
       const test = async (title, run) => { await run(); assert.deepEqual(errors, [], `${title}: page errors`); console.log(`  ✓ ${name}: ${title}`); };
 
@@ -109,6 +113,8 @@ try {
         await knob.evaluate(node => node.removeAttribute('disabled'));
         assert.equal(await knob.evaluate(node => node.tabIndex), 0);
         assert.equal(await knob.evaluate(node => node.querySelector('.bigbang').style.opacity), '');
+        // A disabled form control loses focus, like a native input.
+        await knob.focus();
         await page.keyboard.press('ArrowUp');
         assert.equal(await knob.evaluate(node => node.value), 1.3);
       });
@@ -253,11 +259,176 @@ try {
         await mount('<div id="container" style="width:240px;height:800px"><o-gauge id="gauge" size="100%" value="0"></o-gauge><o-knob id="knob" size="100%"></o-knob><o-menu id="menu" size="100%" items=\'[{"label":"A"},{"label":"B"}]\'></o-menu></div>');
         const boxes = await page.locator('#fixtures').evaluate(() => ['gauge','knob','menu'].map(id => { const box = document.getElementById(id).querySelector('.bigbang').getBoundingClientRect(); return [box.width, box.height]; }));
         assert.ok(boxes.every(([width, height]) => Math.abs(width - height) < 1), `Square widgets ignore an unrelated parent height: ${JSON.stringify(boxes)}`);
-        const widths = await page.locator('#fixtures').evaluate(node => ['gauge','knob','menu'].map(id => document.getElementById(id).querySelector('.orbit-4').getBoundingClientRect().width));
-        assert.ok(widths.every(width => width > 100 && width < 260), `Unexpected initial ring widths: ${widths}`);
+        const widths = await page.locator('#fixtures').evaluate(node => ['gauge','knob','menu'].map(id => document.getElementById(id).querySelector('.orbit-12').getBoundingClientRect().width));
+        assert.ok(widths.every(width => Math.abs(width - 240) < 1), `orbit-12 must reach the edge of a 240px universe: ${widths}`);
         await page.locator('#container').evaluate(node => { node.style.width='480px'; });
-        await page.waitForFunction(previous => ['gauge','knob','menu'].every((id,i) => document.getElementById(id).querySelector('.orbit-4').getBoundingClientRect().width > previous[i]*1.9), widths);
+        await page.waitForFunction(previous => ['gauge','knob','menu'].every((id,i) => document.getElementById(id).querySelector('.orbit-12').getBoundingClientRect().width > previous[i]*1.9), widths);
         assert.equal(await page.locator('#gauge .o-gauge-fill').evaluate(node => node.shadowRoot.querySelector('#orbitShape').getAttribute('d')), '');
+      });
+      await test('gauge and instrument expose meter semantics; bands stay inside their box', async () => {
+        await mount('<o-gauge id="gauge" value="30" max="60" unit=" km/h" label="Speed" size="200px"></o-gauge><o-instrument id="inst" preset="cpu" value="64"></o-instrument>');
+        const gauge = page.getByRole('meter', { name: /Speed/ });
+        assert.deepEqual(await gauge.evaluate(node => ['aria-valuenow','aria-valuemin','aria-valuemax'].map(name => node.getAttribute(name))), ['30','0','60']);
+        assert.equal(await page.locator('#inst').getAttribute('aria-valuenow'), '64');
+        await page.evaluate(() => Orbit.ready());
+        const overflow = await page.locator('#gauge').evaluate(node => {
+          const box = node.querySelector('.bigbang').getBoundingClientRect(), cx = box.x + box.width / 2, cy = box.y + box.height / 2;
+          let far = 0;
+          for (const arc of node.querySelectorAll('o-arc')) {
+            const path = arc.shadowRoot.querySelector('#orbitShape'), ctm = path.getScreenCTM(), length = path.getTotalLength();
+            for (let i = 0; i <= 200; i++) { const p = new DOMPoint(path.getPointAtLength(length * i / 200).x, path.getPointAtLength(length * i / 200).y).matrixTransform(ctm); far = Math.max(far, Math.hypot(p.x - cx, p.y - cy)); }
+          }
+          return far - box.width / 2;
+        });
+        assert.ok(overflow < 1.5, `The band leaves its universe by ${overflow}px`);
+      });
+
+      await test('knob follows the pointer around its band', async () => {
+        await mount('<o-knob id="knob" value="0" label="Turn" size="200px"></o-knob>');
+        const knob = page.getByRole('slider', { name: 'Turn' });
+        await page.evaluate(() => Orbit.ready());
+        const box = await knob.locator('.bigbang').boundingBox();
+        const r = box.width / 2 - 6, cx = box.x + box.width / 2, cy = box.y + box.height / 2;
+        // 12 o'clock is the middle of the default 270° range.
+        await page.mouse.click(cx, cy - r);
+        assert.equal(await knob.evaluate(node => node.value), 50);
+        await page.mouse.move(cx + r, cy); await page.mouse.down(); await page.mouse.up();
+        assert.equal(await knob.evaluate(node => node.value), 83);
+      });
+
+      await test('timer starts, pauses, resets and finishes with events and labels', async () => {
+        await mount('<o-timer id="timer" duration="0.6" label="Tea"></o-timer>');
+        const timer = page.getByRole('timer');
+        await timer.evaluate(node => { window.timerEvents = []; for (const type of ['start','pause','reset','done']) node.addEventListener(type, () => window.timerEvents.push(type)); });
+        const toggle = page.getByRole('button', { name: 'Start' });
+        await toggle.focus();
+        await page.keyboard.press('Enter');
+        assert.equal(await timer.evaluate(node => node.running), true);
+        assert.equal(await timer.evaluate(node => node.hasAttribute('running')), true);
+        await page.getByRole('button', { name: 'Pause' }).click();
+        const paused = await timer.evaluate(node => node.remaining);
+        await page.waitForTimeout(150);
+        assert.equal(await timer.evaluate(node => node.remaining), paused);
+        assert.equal(await page.getByRole('button', { name: 'Resume' }).count(), 1);
+        await page.getByRole('button', { name: 'Reset' }).click();
+        assert.equal(await timer.evaluate(node => node.remaining), .6);
+        await timer.evaluate(node => node.start());
+        await page.waitForFunction(() => window.timerEvents.includes('done'));
+        assert.deepEqual(await page.evaluate(() => window.timerEvents), ['start','pause','reset','start','done']);
+        assert.equal(await timer.evaluate(node => [node.classList.contains('is-done'), node.querySelector('.ok-timer-time').textContent, node.querySelector('.ok-sr').textContent].join('|')), 'true|0:00|Tea: time is up');
+        await timer.evaluate(node => node.setAttribute('duration', '2:00'));
+        assert.equal(await timer.evaluate(node => node.querySelector('.ok-timer-time').textContent), '2:00');
+      });
+
+      await test('status: roving focus, arrows across rings, select event and hub text', async () => {
+        await mount(`<o-status id="status" label="Regions" data='${JSON.stringify([{label:'EU',children:[{label:'api',status:'ok'},{label:'db',status:'down'}]},{label:'US',status:'ok'}])}'></o-status>`);
+        const status = page.getByRole('group', { name: /Regions/ });
+        assert.match(await status.getAttribute('aria-label'), /2 ok, 1 error|1 error, 2 ok/);
+        assert.equal(await page.locator('#status .ok-status-main').textContent(), '1');
+        await status.evaluate(node => { window.selected = []; node.addEventListener('select', event => window.selected.push(event.detail.path.join('.'))); });
+        await page.keyboard.press('Tab');
+        await page.locator('#before').focus();
+        await page.keyboard.press('Tab');
+        assert.equal(await page.evaluate(() => document.activeElement.getAttribute('aria-label')), 'EU: Error');
+        await page.keyboard.press('ArrowUp');
+        assert.equal(await page.evaluate(() => document.activeElement.getAttribute('aria-label')), 'api: OK');
+        await page.keyboard.press('ArrowRight');
+        assert.equal(await page.evaluate(() => document.activeElement.getAttribute('aria-label')), 'db: Error');
+        assert.equal(await page.locator('#status .ok-status-main').textContent(), 'db');
+        await page.keyboard.press('Enter');
+        assert.deepEqual(await page.evaluate(() => window.selected), ['0.1']);
+        await page.keyboard.press('ArrowDown');
+        assert.equal(await page.evaluate(() => document.activeElement.getAttribute('aria-label')), 'EU: Error');
+        await page.keyboard.press('Tab');
+        assert.equal(await status.evaluate(node => node.contains(document.activeElement)), false, 'Tab must leave the status ring');
+        await page.evaluate(() => Orbit.ready());
+        const point = await page.locator('#status [data-path="1"]').evaluate(node => { const attrs = node.getAttributes(), svg = node.shadowRoot.querySelector('svg'), angle = (attrs.arcAngle / 2 - 90) * Math.PI / 180; const p = new DOMPoint(50 + attrs.realRadius * Math.cos(angle), 50 + attrs.realRadius * Math.sin(angle)).matrixTransform(svg.getScreenCTM()); return { x: p.x, y: p.y }; });
+        await page.mouse.click(point.x, point.y);
+        assert.deepEqual(await page.evaluate(() => window.selected), ['0.1', '1']);
+      });
+
+      await test('forms: knob and menu submit, reset, restore validity and follow a disabled fieldset', async () => {
+        await mount(`<form id="form"><fieldset id="set">
+          <o-knob name="volume" value="30" label="Volume"></o-knob>
+          <o-menu name="action" required label="Do" items='[{"label":"Cut","value":"cut"},{"label":"Copy","value":"copy"}]'></o-menu>
+        </fieldset></form>`);
+        const data = () => page.locator('#form').evaluate(form => Object.fromEntries(new FormData(form)));
+        assert.deepEqual(await data(), { volume: '30' });
+        assert.equal(await page.locator('#form').evaluate(form => form.checkValidity()), false, 'required menu without a pick');
+        assert.equal(await page.locator('o-menu').evaluate(node => node.validity.valueMissing), true);
+        await page.evaluate(() => { window.formEvents = []; for (const type of ['input', 'change']) document.querySelector('#form').addEventListener(type, e => window.formEvents.push(`${e.target.localName}:${type}`)); });
+        await page.getByRole('slider', { name: 'Volume' }).focus();
+        await page.keyboard.press('ArrowUp');
+        await page.getByRole('menuitem', { name: 'Copy', exact: true }).focus();
+        await page.keyboard.press('Enter');
+        assert.deepEqual(await data(), { volume: '31', action: 'copy' });
+        assert.deepEqual(await page.evaluate(() => window.formEvents), ['o-knob:input', 'o-knob:change', 'o-menu:input', 'o-menu:change']);
+        assert.equal(await page.locator('#form').evaluate(form => form.checkValidity()), true);
+        await page.locator('o-knob').evaluate(node => { node.value = 80; });
+        assert.equal(await page.evaluate(() => window.formEvents.length), 4, 'value from code fires nothing');
+        await page.locator('#form').evaluate(form => form.reset());
+        assert.deepEqual(await data(), { volume: '30' });
+        assert.equal(await page.locator('o-knob').evaluate(node => node.value), 30);
+        assert.equal(await page.locator('o-menu').evaluate(node => node.value), undefined);
+        await page.locator('#set').evaluate(set => { set.disabled = true; });
+        assert.deepEqual(await page.locator('o-knob').evaluate(node => [node.matches(':disabled'), node.tabIndex, node.getAttribute('aria-disabled')]), [true, -1, 'true']);
+        assert.deepEqual(await data(), {}, 'disabled controls do not submit');
+        await page.locator('#set').evaluate(set => { set.disabled = false; });
+        assert.deepEqual(await page.locator('o-knob').evaluate(node => [node.matches(':disabled'), node.tabIndex]), [false, 0]);
+        assert.equal(await page.locator('o-knob').evaluate(node => node.form?.id), 'form');
+        await mount('<label for="k">Gain</label><o-knob id="k" name="gain" value="5"></o-knob>');
+        assert.equal(await page.locator('#k').evaluate(node => node.labels.length), 1);
+      });
+
+      await test('format and locale reach readouts, ticks and aria-valuetext', async () => {
+        await mount(`<o-gauge id="g" value="1234.5" max="5000" currency="EUR" locale="de-DE"></o-gauge>
+          <o-knob id="k" value="88" max="240" format="unit" unit="kilometer-per-hour" locale="en"></o-knob>
+          <div lang="fr"><o-instrument id="i" min="0" max="1" ticks="3" value="0.5" format="percent"></o-instrument></div>
+          <o-gauge id="f" value="3"></o-gauge>`);
+        const clean = text => text.replace(/[  ]/g, ' ');
+        assert.equal(clean(await page.locator('#g .ok-hub').textContent()), '1.234,50 €');
+        assert.equal(clean(await page.locator('#g').getAttribute('aria-valuetext')), '1.234,50 €');
+        assert.equal(await page.locator('#k .o-knob-readout').textContent(), '88 km/h');
+        assert.deepEqual((await page.locator('#i .ok-inst-num').allTextContents()).map(clean), ['0 %', '50 %', '100 %'], 'the closest lang picks the locale');
+        await page.locator('#f').evaluate(node => { node.formatter = (value, { kind }) => kind === 'aria' ? `${value} stars` : '★'.repeat(value); });
+        assert.equal(await page.locator('#f .ok-hub').textContent(), '★★★');
+        assert.equal(await page.locator('#f').getAttribute('aria-valuetext'), '3 stars');
+      });
+
+      await test('min, max and step: clamping, snapping and keyboard steps', async () => {
+        await mount('<o-gauge id="g" min="10" max="20" step="5" value="17"></o-gauge><o-knob id="k" min="-1" max="1" step="0.25" value="0" label="Pan"></o-knob>');
+        assert.deepEqual(await page.locator('#g').evaluate(node => ['aria-valuemin', 'aria-valuemax', 'aria-valuenow'].map(a => node.getAttribute(a))), ['10', '20', '15']);
+        const knob = page.getByRole('slider', { name: 'Pan' });
+        await knob.focus();
+        await page.keyboard.press('ArrowRight');
+        await page.keyboard.press('PageUp');
+        assert.equal(await knob.evaluate(node => node.value), 1);
+        await page.keyboard.press('ArrowLeft');
+        assert.equal(await knob.getAttribute('aria-valuenow'), '0.75');
+        await knob.evaluate(node => node.stepDown(2));
+        assert.equal(await knob.evaluate(node => node.value), .25);
+      });
+
+      await test('themes inherit from a container, stay at zero specificity and leave defaults alone', async () => {
+        await mount(`<style>.mine { --ok-fill: rgb(255, 0, 0); }</style>
+          <o-gauge id="plain" value="50"></o-gauge>
+          <section class="ok-theme-light"><o-gauge id="inherited" value="50"></o-gauge><o-gauge id="override" class="mine" value="50"></o-gauge><o-knob id="local" theme="glass" value="5"></o-knob></section>
+          <o-gauge id="attr" theme="dark" class="mine" value="50"></o-gauge><o-gauge id="inline" theme="dark" fill="rgb(0, 0, 255)" value="50"></o-gauge>`);
+        const fill = id => page.locator(`#${id} .ok-value`).evaluate(node => getComputedStyle(node).getPropertyValue('--o-fill').trim());
+        assert.equal(await fill('plain'), '#6366f1', 'no theme: the 1.0 default');
+        assert.equal(await fill('inherited'), '#0d9488', 'light theme from the container');
+        assert.equal(await fill('override'), 'rgb(255, 0, 0)', 'a class of yours beats the theme');
+        assert.equal(await fill('local'), 'rgba(255,255,255,.92)', 'the closest theme wins');
+        assert.equal(await fill('attr'), 'rgb(255, 0, 0)', 'zero specificity on the element itself');
+        assert.equal(await fill('inline'), 'rgb(0, 0, 255)', 'color attributes beat themes');
+        await mount('<div class="ok-theme-glass"><o-instrument id="i" value="40"></o-instrument></div>');
+        assert.match(await page.locator('#i .ok-inst-dial').evaluate(node => getComputedStyle(node).backdropFilter || getComputedStyle(node).webkitBackdropFilter), /blur/);
+      });
+
+      await test('every component renders without [orbit] warnings', async () => {
+        await mount(`<o-gauge value="40"></o-gauge><o-donut label="x" data='[{"value":1},{"value":2}]'></o-donut><o-rings data='[{"value":5},{"value":50}]'></o-rings><o-knob></o-knob><o-menu items='[{"label":"A"},{"label":"B","children":[{"label":"C"}]}]'></o-menu><o-instrument preset="fuel"></o-instrument><o-clock preset="chrono" time="10:10"></o-clock><o-clock dial="rings" time="10:10"></o-clock><o-compass heading="200"></o-compass><o-radar targets='[{"angle":20,"dist":.5}]'></o-radar><o-meter value="20"></o-meter><o-timer ticks="60"></o-timer><o-status labels data='[{"label":"A","status":"ok"},{"label":"B","status":"warn"}]'></o-status>`);
+        await page.evaluate(() => Orbit.ready());
+        await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 100)));
       });
       completed++;
     } finally { await browser.close(); }

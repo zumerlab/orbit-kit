@@ -75,6 +75,8 @@ const { OrbitCompass } = await import('../src/o-compass.js');
 const { OrbitRadar } = await import('../src/o-radar.js');
 const { OrbitClock } = await import('../src/o-clock.js');
 const { OrbitInstrument } = await import('../src/o-instrument.js');
+const { OrbitTimer, parseDuration, formatTime } = await import('../src/o-timer.js');
+const { OrbitStatus, normalizeStatus } = await import('../src/o-status.js');
 
 console.log('\no-gauge');
 {
@@ -91,12 +93,12 @@ console.log('\no-donut');
   const h = el.innerHTML;
   check('renders 3 segments (+ track)', (h.match(/shape="none"/g) || []).length === 3);
   check('normalizes to 100%', h.includes('value="52.0000"'), 'expected 52% for first segment');
-  check('square caps by default (rounded is opt-in)', h.includes('shape="none"') && h.includes('--o-gap:2'));
+  check('square caps by default (rounded is opt-in)', h.includes('shape="none"') && h.includes('--o-gap:9'), 'gap 1.5% of the width -> --o-gap 9');
   const roundDonut = make(OrbitDonut, { data: '[{"value":50},{"value":50}]', shape: 'rounded' });
   roundDonut._render();
   check('shape="rounded" opts into rounded caps', roundDonut.innerHTML.includes('shape="rounded"'));
   check('center label present', h.includes('$2.4k'));
-  check('uses orbit-3 ring', h.includes('orbit-3'));
+  check('band hugs the edge of the universe (orbit-12, inner-orbit)', h.includes('orbit-12') && h.includes('inner-orbit') && !h.includes('--o-force'));
 }
 
 console.log('\no-donut (partial via total)');
@@ -112,8 +114,8 @@ console.log('\no-rings');
   el._render();
   const h = el.innerHTML;
   check('renders 3 progress rings', (h.match(/<o-progress/g) || []).length === 3);
-  check('outer ring is orbit-4', h.includes('orbit-4'), '3 rings, step 1 -> outer = 4');
-  check('inner ring is orbit-2', h.includes('orbit-2'));
+  check('outer ring touches the edge (orbit-12)', h.includes('orbit-12'), '3 rings, 3 lanes apart');
+  check('inner rings step inward by whole lanes', h.includes('orbit-9') && h.includes('orbit-6') && !h.includes('--o-force'));
   check('passes max', h.includes('max="100"'));
 }
 
@@ -134,7 +136,7 @@ console.log('\no-knob');
   const el = make(OrbitKnob, { value: '65', unit: '%' });
   el._render();
   const h = el.innerHTML;
-  check('renders track + value dial (force-scaled)', (h.match(/<o-arc/g) || []).length === 2 && h.includes('--o-force'));
+  check('renders track + value dial sized by the universe', (h.match(/<o-arc/g) || []).length === 2 && !h.includes('--o-force') && h.includes('interactive'));
   check('value getter works', el.value === 65);
   check('role slider set', el.getAttribute('role') === 'slider');
 }
@@ -144,7 +146,7 @@ console.log('\no-menu');
   const el = make(OrbitMenu, { items: '[{"label":"Cut","value":"cut"},{"label":"Copy"},{"label":"Paste"}]', label: 'MENU' });
   el._render();
   const h = el.innerHTML;
-  check('renders 3 sectors', (h.match(/class="o-menu-item"/g) || []).length === 3);
+  check('renders 3 sectors', (h.match(/class="inner-orbit o-menu-item"/g) || []).length === 3);
   check('distributes by count, never fit-range (keeps icons aligned)', !h.includes('fit-range'));
   const partialMenu = make(OrbitMenu, { items: '[{"label":"A"},{"label":"B"}]', range: '180' });
   partialMenu._render();
@@ -182,7 +184,7 @@ console.log('\no-menu (concentric / editor style)');
   const el = make(OrbitMenu, { items, label: 'MENU', expand: 'concentric' });
   el._render();
   check('one ring at root', (el.innerHTML.match(/ok-menu-ring/g) || []).length === 1);
-  check('icon placed at sector center via composite', el.innerHTML.includes('o-menu-icon') && /--o-angle-composite:calc\([-\d.]+deg\)/.test(el.innerHTML));
+  check('icon placed at sector center via composite', el.innerHTML.includes('o-menu-icon') && /--o-angle-composite:[-\d.]+deg/.test(el.innerHTML) && !el.innerHTML.includes('spin-lock'));
 
   el._activateAt(0, 1); // open "Format" — parent ring stays, children fan out
   check('parent ring stays + child ring added (2 rings)', (el.innerHTML.match(/ok-menu-ring/g) || []).length === 2);
@@ -208,7 +210,7 @@ console.log('\no-compass');
   check('first cardinal (N) is accented', h.includes('ok-cmp-card north'));
   check('36-tick scale + dial + lubber', (h.match(/ok-cmp-tick/g) || []).length >= 36 && h.includes('ok-cmp-dial') && h.includes('ok-cmp-lubber'));
   check('no fit-range on the 360 card (overlap bug)', !h.includes('fit-range'));
-  check('force-scaled so it fits the box', h.includes('--o-force:calc(100cqw')); // 220*12/6
+  check('sized by its universe (no --o-force)', !h.includes('--o-force') && h.includes('orbit-12 ok-cmp-dial'));
   // heading 45 → card rotated -45°, readout "045°" NE.
   check('card rotates to heading', el._cards.style._p['--o-from'] === '-45deg');
   check('readout shows degrees + point', el._deg.textContent === '045°' && el._sub.textContent === 'NE');
@@ -219,9 +221,9 @@ console.log('\no-radar');
   const el = make(OrbitRadar, { rings: '3', spokes: '8', targets: '[{"angle":60,"dist":0.8},{"angle":200,"dist":0.4}]', label: 'SCAN' });
   el._render();
   const h = el.innerHTML;
-  check('range rings drawn as orbit borders', (h.match(/border:1px solid color-mix\(/g) || []).length === 3, '3 native orbit rings');
-  check('renders 8 cross-hair spokes', (h.match(/class="vector ok-radar-spoke"/g) || []).length === 8);
-  check('sweep is a rotating conic-gradient beam', h.includes('o-radar-sweep') && h.includes('conic-gradient'));
+  check('range rings from one grid layer, any count', h.includes('ok-radar-grid') && h.includes('--ok-radar-rings:3'));
+  check('renders 8 spokes from the center', (h.match(/class="vector outer-orbit ok-radar-spoke"/g) || []).length === 8);
+  check('sweep is a rotating conic-gradient beam', h.includes('o-radar-sweep') && /conic-gradient/.test(injectedStyles.find((s) => s.id === 'orbit-kit-radar')?.textContent));
   check('sweep width drives the beam angle', (() => {
     const wide = make(OrbitRadar, { rings: '3', 'sweep-width': '180' });
     wide._render();
@@ -229,7 +231,7 @@ console.log('\no-radar');
   })());
   check('renders 2 blips', (h.match(/o-radar-blip/g) || []).length === 2);
   check('blip aimed via angle-composite', h.includes('--o-angle-composite:-30deg'));
-  check('scope alpha supports arbitrary CSS colors', h.includes('color-mix(in srgb'));
+  check('scope alpha supports arbitrary CSS colors', /color-mix\(in srgb/.test(injectedStyles.find((s) => s.id === 'orbit-kit-radar')?.textContent));
 }
 
 console.log('\no-clock');
@@ -252,7 +254,7 @@ console.log('\no-clock (variants)');
   plain._render();
   check('no second hand unless requested', !plain.innerHTML.includes('ok-clock-sec'));
   check('default case is round', plain.innerHTML.includes('ok-clock-case--round'));
-  check('force scales dial to size (orbit-11)', plain.innerHTML.includes('--o-force:calc(100cqw'));
+  check('the dial is the universe (orbit-12, no --o-force)', plain.innerHTML.includes('orbit-12 ok-clock-dial') && !plain.innerHTML.includes('--o-force'));
 
   const bare = make(OrbitClock, { time: '12:00', numerals: 'none' });
   bare._render();
@@ -312,7 +314,7 @@ console.log('\no-clock (iOS rings face)');
   check('digital time in center', el._ringTime.textContent === '09:45');
   // 09:45 → hour ring = ((9%12)+45/60)/12 = 0.8125 → 81.25%.
   check('hour ring filled by time', el._ringH.getAttribute('value') === '81.25');
-  check('rings face is force-scaled', h.includes('--o-force'));
+  check('rings face sized by its universe', !h.includes('--o-force') && h.includes('orbit-12'));
 }
 
 console.log('\no-clock (chronograph sub-dials)');
@@ -323,7 +325,7 @@ console.log('\no-clock (chronograph sub-dials)');
   check('chrono preset renders three sub-dials', h.includes('ok-sub-sec') && h.includes('ok-sub-h24') && h.includes('ok-sub-date'));
   check('sub-dials are nested gravity-spots', (h.match(/gravity-spot/g) || []).length >= 4);
   check('sub-dials sit at 3/6/9', h.includes('angle-270') && h.includes('angle-90') && h.includes('angle-180'));
-  check('sub-dial nested force keeps them small', h.includes('--o-force:calc(100cqw'));
+  check('sub-dials are satellites sized in lanes', h.includes('orbit-5" style="--o-size-ratio:5.8'));
   // 09:41:30 → small-seconds sub-hand at 30*6-90 = 90deg.
   check('sub-second hand is driven live', ch._subSec.style._p['--o-angle-composite'] === '90deg');
   // 24h sub-hand: ((9+41/60)/24)*360-90 = 55.25deg.
@@ -364,7 +366,7 @@ console.log('\no-instrument (presets + zones + cases)');
 {
   const air = make(OrbitInstrument, { preset: 'airspeed', value: '120' });
   air._render();
-  check('airspeed has 3 color zone arcs', (air.innerHTML.match(/<o-arc value=/g) || []).length === 3, 'green/yellow/red');
+  check('airspeed has 3 color zone arcs', (air.innerHTML.match(/ok-inst-zone/g) || []).length === 3, 'green/yellow/red');
   check('plus a vector needle', air.innerHTML.includes('ok-inst-needle'));
   check('300° sweep from preset', air.innerHTML.includes('--o-range:300deg'));
 
@@ -372,9 +374,9 @@ console.log('\no-instrument (presets + zones + cases)');
   fuel._render();
   check('custom tick labels (E/½/F)', fuel.innerHTML.includes('>E<') && fuel.innerHTML.includes('>F<'));
   check('quarter-arc gauge has no round bezel', fuel.innerHTML.includes('ok-inst-case--bare') && !fuel.innerHTML.includes('ok-inst-dial'));
-  check('quarter-arc gauge gets a track band instead', /orbit-9" style="--o-range:90deg.*<o-arc value="100"/.test(fuel.innerHTML));
+  check('quarter-arc gauge gets a track band instead', /orbit-11" style="--o-range:90deg.*ok-inst-track" value="100"/.test(fuel.innerHTML));
   check('fuel uses canonical from:270 (9 o’clock start)', fuel.innerHTML.includes('--o-from:270deg'));
-  check('fuel hides the meaningless numeric readout', !fuel.innerHTML.includes('ok-inst-value') && fuel.innerHTML.includes('FUEL'));
+  check('fuel hides the meaningless numeric readout', !fuel.innerHTML.includes('ok-inst-value') && fuel.innerHTML.includes('Fuel'));
 
   const fuelSquare = make(OrbitInstrument, { preset: 'fuel', case: 'square' });
   fuelSquare._render();
@@ -383,12 +385,50 @@ console.log('\no-instrument (presets + zones + cases)');
   const cpu = make(OrbitInstrument, { preset: 'cpu', value: '73', case: 'square' });
   cpu._render();
   check('square case', cpu.innerHTML.includes('ok-inst-case--square'));
-  check('non-contiguous zone placed by its own --o-from', /orbit-9" style="--o-range:270deg;--o-from:[\d.]+deg/.test(cpu.innerHTML));
+  check('non-contiguous zone placed by its own --o-from', /orbit-11" style="--o-range:270deg;--o-from:[\d.]+deg/.test(cpu.innerHTML));
 
   const custom = make(OrbitInstrument, { min: '0', max: '100', value: '40', unit: '%', label: 'LOAD', redline: '90' });
   custom._render();
   check('redline= sugar adds a red zone', custom.innerHTML.includes('--o-fill:#ef4444'));
   check('ad-hoc gauge needs no preset', custom._value.textContent === '40' && custom.innerHTML.includes('LOAD'));
+}
+
+console.log('\no-timer');
+{
+  const el = make(OrbitTimer, { duration: '1:30', label: 'Tea' });
+  el._render();
+  const h = el.innerHTML;
+  check('track + progress ring on the edge', h.includes('ok-track') && h.includes('<o-progress class="inner-orbit ok-value"') && h.includes('orbit-12'));
+  check('starts full', el.remaining === 90 && el._ring.getAttribute('value') === '100.00');
+  check('shows m:ss', el._time.textContent === '1:30');
+  check('has start and reset buttons', h.includes('ok-timer-toggle') && h.includes('aria-label="Reset"'));
+  check('role timer with a name', el.getAttribute('role') === 'timer' && el.getAttribute('aria-label') === 'Tea: 1:30 left of 1:30');
+  check('parses durations', parseDuration('90') === 90 && parseDuration('1:02:03') === 3723 && parseDuration('45s') === 45 && parseDuration('nope', 7) === 7);
+  check('formats time rounding up', formatTime(59.2) === '1:00' && formatTime(3723) === '1:02:03' && formatTime(0) === '0:00');
+  const ticks = make(OrbitTimer, { duration: '60', ticks: '60' });
+  ticks._render();
+  check('optional ticks', (ticks.innerHTML.match(/ok-timer-tick/g) || []).length === 60);
+  const bare = make(OrbitTimer, { controls: 'false' });
+  bare._render();
+  check('controls="false" drops the buttons', !bare.innerHTML.includes('<button'));
+}
+
+console.log('\no-status');
+{
+  const el = make(OrbitStatus, { data: JSON.stringify([{ label: 'API', status: 'ok' }, { label: 'DB', status: 'degraded' }, { label: 'Queue', status: 'down' }]), label: 'Services' });
+  el._render();
+  const h = el.innerHTML;
+  check('one ring of stacked segments', (h.match(/ok-status-seg"/g) || []).length === 3 && h.includes('orbit-12'));
+  check('aliases map to statuses', normalizeStatus('degraded') === 'warn' && normalizeStatus('down') === 'error' && normalizeStatus('???') === 'off');
+  check('segments are interactive buttons', h.includes('interactive role="button"') && h.includes('aria-label="DB: Warning"'));
+  check('labels are opt-in', !h.includes('>API</o-arc>'));
+  const nested = make(OrbitStatus, { labels: '', data: JSON.stringify([{ label: 'EU', children: [{ label: 'api', status: 'ok' }, { label: 'db', status: 'error' }] }, { label: 'US', status: 'ok' }]) });
+  nested._render();
+  const n = nested.innerHTML;
+  check('groups make an inner ring', n.includes('orbit-9') && n.includes('orbit-12'));
+  check('group shows its worst child', n.includes('data-path="0" data-status="error"'));
+  check('leaf groups leave an aligned spacer outside', n.includes('ok-status-spacer'));
+  check('labels along the arcs when asked', n.includes('>api</o-arc>'));
 }
 
 console.log('\ndesign pass: glow + hub');
@@ -413,7 +453,7 @@ console.log('\nkit baseline');
   check('baseline stylesheet injected once', !!base);
   check('strips default satellite border', !!base && base.textContent.includes('border: none'));
   check('scoped to kit tags only', !!base && base.textContent.includes(':where(o-gauge'));
-  check('border-strip covers o-clock + o-instrument (regression)', !!base && base.textContent.includes('o-clock,o-instrument) .satellite'));
+  check('border-strip covers o-clock, o-instrument and the new tags', !!base && /o-clock,o-instrument,o-timer,o-status[\w,-]*\) :where\(\.satellite\)/.test(base.textContent));
   check('defines shared .ok-hub', !!base && base.textContent.includes('.ok-hub'));
 }
 
