@@ -1,59 +1,82 @@
-import { OrbitKitElement, define, finiteNumber, cssValue, escapeHTML as e } from './base.js';
+import { OrbitKitElement, define, injectStyleOnce, universe, hub, fixed, finiteNumber, cssValue, normalizeRange, escapeHTML as e, withShared, FORMAT_ATTRS } from './base.js';
 const PALETTE = ['#fa114f', '#a3ff00', '#00fff0', '#ffd60a', '#ff9500'];
 
-/** Concentric activity rings, outermost first. */
+/**
+ * <o-rings>: concentric activity rings, outermost first.
+ *
+ * Ring i sits on orbit (12 - i × spacing) with its band hugging the inside of
+ * that lane (inner-orbit), so any thickness fits and the outer ring touches
+ * the edge of the universe. Each ring is a track <o-arc> under an <o-progress>.
+ */
 export class OrbitRings extends OrbitKitElement {
   static get observedAttributes() {
-    return ['data', 'size', 'stroke-width', 'track', 'shape', 'range', 'from', 'step', 'label', 'unit', 'glow'];
+    return withShared(['data', 'size', 'thickness', 'stroke-width', 'track', 'shape', 'range', 'from', 'spacing', 'step', 'label', 'min', 'max', 'glow'], FORMAT_ATTRS);
   }
   readConfig() {
     const range = Math.max(0, Math.min(360, this._num('range', 360)));
-    const data = this._array('data').map((d, i) => ({
-      value: Math.max(0, finiteNumber(d.value)), max: finiteNumber(d.max, 100) > 0 ? finiteNumber(d.max, 100) : 100,
-      color: cssValue(d.color, PALETTE[i % PALETTE.length]), label: d.label == null ? null : String(d.label)
-    }));
+    // Each ring has its own min/max; the attributes are the defaults (0 and 100).
+    const lo = this._num('min', 0), hi = this._num('max', 100);
+    const data = this._array('data').map((d, i) => {
+      const min = finiteNumber(d.min, lo);
+      let max = finiteNumber(d.max, hi);
+      if (!(max > min)) max = min + 100;
+      const r = normalizeRange({ min, max });
+      return {
+        value: Math.min(r.max, Math.max(r.min, finiteNumber(d.value, r.min))), min: r.min, max: r.max,
+        color: cssValue(d.color, PALETTE[i % PALETTE.length]), label: d.label == null ? null : String(d.label)
+      };
+    });
+    // Spacing between ring centers, in whole lanes: as wide as fits, 1 to 3.
+    const n = Math.max(1, data.length);
+    const base = Math.max(1, Math.min(3, Math.floor(10 / n)));
+    // `spacing` (1.0: `step`) multiplies the distance between rings.
+    let spacing = Math.max(1, Math.round(base * Math.max(1, this._num('spacing', this._num('step', 1)))));
+    while (spacing > 1 && (n - 1) * spacing > 10) spacing--;
+    const thickness = this._thickness(base * .86, spacing);
     return {
       data, range, from: this.hasAttribute('from') ? this._num('from', 0) : (range === 360 ? 0 : this._autoFrom(range)),
-      size: this._size('size', '200px'), strokeWidth: Math.max(0, this._num('stroke-width', 12)),
-      track: this._color('track', ''), shape: this._str('shape', 'rounded'), step: Math.max(1, Math.round(this._num('step', 1))),
-      unit: this._str('unit', ''), glow: this.getAttribute('glow'), label: this.getAttribute('label')
+      size: this._size('size', '200px'), thickness, spacing,
+      strokeWidth: Math.max(0, this._num('stroke-width', 0)),
+      track: this._color('track', ''), shape: this._str('shape', 'rounded'),
+      unit: this._unitText(), glow: this.hasAttribute('glow') ? this._glowPx() : null, label: this.getAttribute('label')
     };
   }
-  structuralSignature({ data, label, unit, ...structure }) { return JSON.stringify({ ...structure, count: data.length }); }
+  structuralSignature({ data, label, unit, track, ...structure }) { return JSON.stringify({ ...structure, count: data.length }); }
+  _track(cfg, d) { return cfg.track || `color-mix(in srgb, ${d.color} 18%, transparent)`; }
   build(cfg) {
-    const outer = 1 + cfg.data.length * cfg.step;
+    const stroke = cfg.strokeWidth ? `--o-stroke-width:${cfg.strokeWidth};` : '';
     const rings = cfg.data.map((d, i) => {
-      const orbit = outer - i * cfg.step;
-      const track = cfg.track || `color-mix(in srgb, ${d.color} 14%, #0c0f14)`;
-      const ring = `--o-range:${cfg.range}deg;--o-from:${cfg.from}deg;`;
-      const fill = `--o-fill:${d.color};--o-stroke:${d.color};--o-stroke-width:${cfg.strokeWidth};${this._glow(d.color)}`;
-      return `<div class="orbit-${orbit}" style="${ring}"><o-arc class="ok-rings-track" value="100" shape="${e(cfg.shape)}" style="${e(`--o-fill:${track};--o-stroke:${track};--o-stroke-width:${cfg.strokeWidth}`)}"></o-arc></div>
-        <div class="orbit-${orbit}" style="${ring}"><o-progress class="ok-rings-value" value="${Math.min(d.value, d.max)}" max="${d.max}" shape="${e(cfg.shape)}" style="${e(fill)}"></o-progress></div>`;
+      const ring = `class="orbit-${12 - i * cfg.spacing}" style="--o-range:${cfg.range}deg;--o-from:${cfg.from}deg;--o-size-ratio:${fixed(cfg.thickness)};--o-gap:0"`;
+      const glow = cfg.glow == null ? '' : `filter:drop-shadow(0 0 ${cfg.glow}px ${d.color});`;
+      return `<div ${ring}><o-arc class="inner-orbit ok-rings-track" value="100" shape="${e(cfg.shape)}" style="${e(`--o-fill:${this._track(cfg, d)};${stroke}`)}"></o-arc></div>` +
+        `<div ${ring}><o-progress class="inner-orbit ok-rings-value" value="${d.value - d.min}" max="${d.max - d.min}" shape="${e(cfg.shape)}" style="${e(`--o-fill:${d.color};${stroke}${glow}`)}"></o-progress></div>`;
     }).join('');
-    this.innerHTML = `<div class="bigbang" style="width:${e(cfg.size)};aspect-ratio:1;height:auto;container-type:inline-size;">
-      <div class="gravity-spot" style="--o-force:calc(100cqw * 12 / ${outer + 1});">${rings}
-        <div class="orbit-0"><div class="satellite at-center"><div class="capsule ok-hub">${e(cfg.label ?? '')}${cfg.label == null ? '' : e(cfg.unit)}</div></div></div>
-      </div></div>`;
+    const hole = 12 - (cfg.data.length - 1) * cfg.spacing - cfg.thickness;
+    this.innerHTML = universe(cfg.size, `${rings}
+      ${hub(2 * hole - .5, `${e(cfg.label ?? '')}${cfg.label == null ? '' : e(cfg.unit)}`)}`);
     this._rings = [...this.querySelectorAll('.ok-rings-value')];
     this._tracks = [...this.querySelectorAll('.ok-rings-track')];
     this._center = this.querySelector('.ok-hub');
   }
   sync(cfg) {
     this._rings?.forEach((ring, i) => {
-      const d = cfg.data[i], track = cfg.track || `color-mix(in srgb, ${d.color} 14%, #0c0f14)`;
-      ring.setAttribute('max', String(d.max));
-      ring.setAttribute('value', String(Math.min(d.value, d.max)));
+      const d = cfg.data[i];
+      ring.setAttribute('max', String(d.max - d.min));
+      ring.setAttribute('value', String(d.value - d.min));
       ring.style.setProperty('--o-fill', d.color);
-      ring.style.setProperty('--o-stroke', d.color);
-      if (cfg.glow != null) ring.style.setProperty('filter', `drop-shadow(0 0 ${Math.max(0, this._num('glow', 6))}px ${d.color})`);
-      this._tracks[i]?.style.setProperty('--o-fill', track);
-      this._tracks[i]?.style.setProperty('--o-stroke', track);
+      if (cfg.glow != null) ring.style.setProperty('filter', `drop-shadow(0 0 ${cfg.glow}px ${d.color})`);
+      else ring.style.removeProperty?.('filter');
+      this._tracks[i]?.style.setProperty('--o-fill', this._track(cfg, d));
     });
     if (this._center) {
       this._center.textContent = cfg.label == null ? '' : `${cfg.label}${cfg.unit}`;
       this._center.hidden = cfg.label == null;
     }
-    this._describe([cfg.label, ...cfg.data.map((d, i) => `${d.label ?? `Ring ${i + 1}`}: ${d.value} of ${d.max}${cfg.unit}`)].filter(Boolean).join('; ') || 'Empty activity rings');
+    this._describe([cfg.label == null ? null : `${cfg.label}${cfg.unit}`, ...cfg.data.map((d, i) => `${d.label ?? `Ring ${i + 1}`}: ${this._format(d.value, { min: d.min, max: d.max })} of ${this._formatText(d.max, { min: d.min, max: d.max })}`)].filter(Boolean).join('; ') || 'Empty activity rings');
   }
 }
+injectStyleOnce('orbit-kit-rings', `
+o-rings :is(.ok-rings-track, .ok-rings-value) { --o-stroke: var(--o-fill); }
+o-rings .ok-hub { --ok-hub-size: 1.2em; }
+`);
 define('o-rings', OrbitRings);

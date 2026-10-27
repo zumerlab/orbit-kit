@@ -25,12 +25,12 @@ const server = http.createServer(async (request, response) => {
   try {
     const pathname = decodeURIComponent(new URL(request.url, 'http://localhost').pathname);
     if (pathname === '/favicon.ico') { response.writeHead(204).end(); return; }
-    const gallery = pathname === '/' || pathname === '/docs/index.html';
+    const gallery = pathname === '/' || pathname === '/docs/gallery.html';
     const route = pathname.startsWith('/orbit/') ? [dist, pathname.slice(7)]
       : pathname.startsWith('/src/') ? [path.join(root, 'src'), pathname.slice(5)]
         : null;
     let filename;
-    if (gallery) filename = path.join(root, 'docs/index.html');
+    if (gallery) filename = path.join(root, 'docs/gallery.html');
     else if (route) {
       filename = path.resolve(route[0], route[1]);
       if (!filename.startsWith(route[0] + path.sep)) { response.writeHead(404).end('Not found'); return; }

@@ -8,7 +8,7 @@ import http from 'node:http';
 /** Shared local-only package routing for optional visual capture scripts. */
 export async function createCaptureContext(viewport) {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-  const orbit = path.resolve(process.env.ORBIT_DIR || path.join(root, 'node_modules/@zumer/orbit'));
+  const orbit = path.resolve(process.env.ORBIT_DIR || (fs.existsSync(path.join(root, '../orbit/dist/orbit.js')) ? path.join(root, '../orbit') : path.join(root, 'node_modules/@zumer/orbit')));
   for (const file of ['orbit.css', 'orbit.js']) assert.ok(fs.existsSync(path.join(orbit, 'dist', file)), `Missing ${orbit}/dist/${file}; build Orbit first or set ORBIT_DIR.`);
   const outDir = path.join(root, '.shots');
   fs.mkdirSync(outDir, { recursive: true });
@@ -45,7 +45,7 @@ export async function createCaptureContext(viewport) {
         await route.abort();
       }
     });
-    await page.goto(`http://127.0.0.1:${server.address().port}/docs/index.html`, { waitUntil:'networkidle' });
+    await page.goto(`http://127.0.0.1:${server.address().port}/docs/gallery.html`, { waitUntil:'networkidle' });
     const assertClean = () => assert.deepEqual(errors, [], `Capture failed with browser/local asset errors:\n${errors.join('\n')}`);
     assertClean();
     console.log(`Capturing kit ${root}/src against Orbit ${orbit}/dist`);
