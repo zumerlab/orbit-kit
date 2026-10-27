@@ -27,9 +27,9 @@ import '@zumer/orbit-kit'
 Or in a plain page:
 
 ```html
-<link rel="stylesheet" href="https://unpkg.com/@zumer/orbit@2.0.0/dist/orbit.min.css">
-<script defer src="https://unpkg.com/@zumer/orbit@2.0.0/dist/orbit.min.js"></script>
-<script type="module" src="https://unpkg.com/@zumer/orbit-kit@2.0.0/src/orbit-kit.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/@zumer/orbit/dist/orbit.min.css">
+<script defer src="https://unpkg.com/@zumer/orbit/dist/orbit.min.js"></script>
+<script type="module" src="https://unpkg.com/@zumer/orbit-kit/src/orbit-kit.js"></script>
 ```
 
 The entry registers every component. To load only the ones you use, import their files:
@@ -39,7 +39,7 @@ import '@zumer/orbit-kit/o-gauge.js'
 import '@zumer/orbit-kit/o-timer.js'
 ```
 
-`@zumer/orbit` is a peer dependency (`^2.0.0`). The kit does not work with Orbit 1.x. Components are standard custom elements, so they work in plain HTML and in any framework that renders the DOM.
+`@zumer/orbit` 2 is a peer dependency. The kit does not work with Orbit 1.x. Components are standard custom elements, so they work in plain HTML and in any framework that renders the DOM.
 
 ## Components
 
