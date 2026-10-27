@@ -8,7 +8,7 @@ Ready-made radial components built on [Orbit](https://github.com/zumerlab/orbit)
 
 That tag writes the Orbit structure you would write by hand into the page: a `.bigbang`, a `.gravity-spot`, a ring, two arcs and a readout. It scales with its box, takes your CSS and shows up as plain elements in the inspector. When you need something the kit does not do, start from what it built.
 
-[Documentation and live examples](https://zumerlab.github.io/orbit/kit/)
+[Documentation and live examples](https://zumerlab.com/orbit/kit/)
 
 ## Install
 
@@ -45,24 +45,24 @@ import '@zumer/orbit-kit/o-timer.js'
 
 | Tag | What it is |
 | --- | --- |
-| [`<o-gauge>`](https://zumerlab.github.io/orbit/kit/gauge.html) | One value on an arc, with a readout. |
-| [`<o-donut>`](https://zumerlab.github.io/orbit/kit/donut.html) | A donut chart from a JSON array. |
-| [`<o-rings>`](https://zumerlab.github.io/orbit/kit/rings.html) | Concentric activity rings. |
-| [`<o-knob>`](https://zumerlab.github.io/orbit/kit/knob.html) | A rotary control: pointer, wheel and keys. |
-| [`<o-menu>`](https://zumerlab.github.io/orbit/kit/menu.html) | A radial menu, flat or nested. |
-| [`<o-instrument>`](https://zumerlab.github.io/orbit/kit/instrument.html) | Needle gauges with ticks, zones and presets. |
-| [`<o-clock>`](https://zumerlab.github.io/orbit/kit/clock.html) | Clocks and watch faces, live or fixed. |
-| [`<o-compass>`](https://zumerlab.github.io/orbit/kit/compass.html) | A heading indicator. |
-| [`<o-radar>`](https://zumerlab.github.io/orbit/kit/radar.html) | A scope with a sweep and blips. |
-| [`<o-timer>`](https://zumerlab.github.io/orbit/kit/timer.html) | A countdown ring with start, pause and reset. |
-| [`<o-status>`](https://zumerlab.github.io/orbit/kit/status.html) | Health of many things as colored segments, in layers. |
-| [`<o-range>`](https://zumerlab.github.io/orbit/kit/range.html) | A circular range slider: two handles, numbers or times of day. |
-| [`<o-time-picker>`](https://zumerlab.github.io/orbit/kit/time-picker.html) | A clock-face time picker: hours, then minutes. |
-| [`<o-spinner>`](https://zumerlab.github.io/orbit/kit/spinner.html) | A loading indicator in five variants, with determinate progress. |
-| [`<o-radar-chart>`](https://zumerlab.github.io/orbit/kit/radar-chart.html) | A radar (spider) chart: one polygon per series on a shared web. |
-| [`<o-sunburst>`](https://zumerlab.github.io/orbit/kit/sunburst.html) | A tree as nested rings: hover a branch, click to zoom in. |
-| [`<o-wheel>`](https://zumerlab.github.io/orbit/kit/wheel.html) | A prize wheel: spins, slows down and lands on a result picked by weight. |
-| [`<o-color-wheel>`](https://zumerlab.github.io/orbit/kit/color-wheel.html) | A color picker: hue ring, saturation and brightness square, swatches. A form control. |
+| [`<o-gauge>`](https://zumerlab.com/orbit/kit/gauge.html) | One value on an arc, with a readout. |
+| [`<o-donut>`](https://zumerlab.com/orbit/kit/donut.html) | A donut chart from a JSON array. |
+| [`<o-rings>`](https://zumerlab.com/orbit/kit/rings.html) | Concentric activity rings. |
+| [`<o-knob>`](https://zumerlab.com/orbit/kit/knob.html) | A rotary control: pointer, wheel and keys. |
+| [`<o-menu>`](https://zumerlab.com/orbit/kit/menu.html) | A radial menu, flat or nested. |
+| [`<o-instrument>`](https://zumerlab.com/orbit/kit/instrument.html) | Needle gauges with ticks, zones and presets. |
+| [`<o-clock>`](https://zumerlab.com/orbit/kit/clock.html) | Clocks and watch faces, live or fixed. |
+| [`<o-compass>`](https://zumerlab.com/orbit/kit/compass.html) | A heading indicator. |
+| [`<o-radar>`](https://zumerlab.com/orbit/kit/radar.html) | A scope with a sweep and blips. |
+| [`<o-timer>`](https://zumerlab.com/orbit/kit/timer.html) | A countdown ring with start, pause and reset. |
+| [`<o-status>`](https://zumerlab.com/orbit/kit/status.html) | Health of many things as colored segments, in layers. |
+| [`<o-range>`](https://zumerlab.com/orbit/kit/range.html) | A circular range slider: two handles, numbers or times of day. |
+| [`<o-time-picker>`](https://zumerlab.com/orbit/kit/time-picker.html) | A clock-face time picker: hours, then minutes. |
+| [`<o-spinner>`](https://zumerlab.com/orbit/kit/spinner.html) | A loading indicator in five variants, with determinate progress. |
+| [`<o-radar-chart>`](https://zumerlab.com/orbit/kit/radar-chart.html) | A radar (spider) chart: one polygon per series on a shared web. |
+| [`<o-sunburst>`](https://zumerlab.com/orbit/kit/sunburst.html) | A tree as nested rings: hover a branch, click to zoom in. |
+| [`<o-wheel>`](https://zumerlab.com/orbit/kit/wheel.html) | A prize wheel: spins, slows down and lands on a result picked by weight. |
+| [`<o-color-wheel>`](https://zumerlab.com/orbit/kit/color-wheel.html) | A color picker: hue ring, saturation and brightness square, swatches. A form control. |
 
 `<o-meter>`, a basic needle gauge from 0.x, still ships. `<o-instrument>` does all it does and more.
 

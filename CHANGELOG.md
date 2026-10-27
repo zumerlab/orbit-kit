@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.0.0
+## 2.0.0 (27/10/2026)
 
 Orbit Kit now runs on Orbit 2, with seven new components and four options that work the same in every component. Tag names and attributes from 0.x keep working; the few behavior changes are under Changed.
 

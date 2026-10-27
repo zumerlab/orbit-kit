@@ -52,7 +52,7 @@
     "status",
     "health"
   ],
-  "homepage": "https://zumerlab.github.io/orbit/kit/",
+  "homepage": "https://zumerlab.com/orbit/kit/",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/zumerlab/orbit-kit.git"
