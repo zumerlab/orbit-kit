@@ -7,14 +7,17 @@
 
   <!-- Orbit core: CSS engine + base components (registers <o-progress>, <o-arc>).
        For production use the CDN:
-         https://unpkg.com/@zumer/orbit@latest/dist/orbit.css|.js -->
-  <link rel="stylesheet" href="https://unpkg.com/@zumer/orbit@latest/dist/orbit.css">
-  <script src="https://unpkg.com/@zumer/orbit@latest/dist/orbit.js"></script>
+         https://unpkg.com/@zumer/orbit@1/dist/orbit.css|.js -->
+  <link rel="stylesheet" href="https://unpkg.com/@zumer/orbit@1/dist/orbit.css">
+  <script src="https://unpkg.com/@zumer/orbit@1/dist/orbit.js"></script>
 
   <!-- orbit-kit: registers every high-level component -->
-  <script type="module" src="https://unpkg.com/@zumer/orbit-kit@latest/src/orbit-kit.js"></script>
+  <script type="module" src="https://unpkg.com/@zumer/orbit-kit@0/src/orbit-kit.js"></script>
 
   <style>
+    /* Until Orbit Kit 2 is out: an announcement without a link. */
+    .notice { margin: -2rem -2rem 2rem; padding: .7rem 1rem; text-align: center; font-size: .95rem; line-height: 1.4; color: #fffffe; background: linear-gradient(90deg, #ef4565, #3da9fc); }
+    .notice strong { font-weight: 700; }
     body { font-family: system-ui, sans-serif; margin: 0; padding: 2rem; background: #060f16; color: #d8eefe; }
     h1 { font-weight: 800; }
     h2 { font-weight: 700; margin-top: 2.5rem; border-bottom: 1px solid #1f2937; padding-bottom: .4rem; }
@@ -34,6 +37,7 @@
   </style>
 </head>
 <body>
+  <p class="notice"><strong>Orbit Kit 2 is on its way</strong>, together with Orbit 2. New components, themes and a new home. This gallery stays here for the current version.</p>
   <h1>orbit-kit — component gallery</h1>
   <p class="built-on">
     <span>🛰️ Built on <strong><a href="https://github.com/zumerlab/orbit">Orbit</a></strong> — the CSS + JavaScript system for radial UIs.</span>
